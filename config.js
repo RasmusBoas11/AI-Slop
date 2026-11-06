@@ -9,5 +9,5 @@ window.BOOKCLUB_CONFIG = {
   clubName: "Holtebois Book Club",
   supabaseUrl: "https://xhnoseyctmywrhwnijks.supabase.co",
   supabaseAnonKey: "sb_publishable_4HldTteuFhgPaoWCOyq2fA_gZx7vJci", // publishable key: safe to be public
-  googleBooksApiKey: "",  // optional, gives many more (Danish) search results: see README
+  googleBooksApiKey: "AIzaSyArWpUTIvYVn42Hs-E6vK5SkaO19mnXZq8",  // locked to rasmusboas11.github.io in Google Cloud
 };
