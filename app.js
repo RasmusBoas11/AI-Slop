@@ -3,7 +3,7 @@
 
   const cfg = window.BOOKCLUB_CONFIG || {};
   const SHARED = Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey);
-  const SUPABASE_SCRIPT = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
+  const SUPABASE_SCRIPT = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.0/dist/umd/supabase.js';
 
   // ---------- Small helpers ----------
   const $ = (sel, el = document) => el.querySelector(sel);
