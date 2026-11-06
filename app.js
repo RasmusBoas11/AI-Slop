@@ -11,14 +11,26 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
   const avg = (nums) => (nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null);
   const fmt = (n) => (n == null ? '–' : n.toFixed(1));
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   // A stable colour (0–359) per title or name, for covers and avatars
   const hue = (s) => { let h = 7; for (const c of String(s || '')) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
   const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const avatarHtml = (name) => `<span class="avatar" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
   const fmtDate = (d) => {
     if (!d) return '';
+    const date = new Date(d.length === 10 ? d + 'T00:00:00' : d);
+    return isNaN(date) ? d : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const fmtMonth = (d) => {
+    if (!d) return '';
     const date = new Date(d + 'T00:00:00');
     return isNaN(date) ? d : date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  };
+  // Turn HTML descriptions (Apple/Google) into plain text
+  const plainText = (html) => {
+    if (!html) return '';
+    const doc = new DOMParser().parseFromString(String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n'), 'text/html');
+    return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
   };
 
   function readLocal(key, fallback) {
@@ -69,7 +81,12 @@
       async updateBook(id, patch) {
         const d = load();
         const b = d.books.find((x) => x.id === id);
-        if (b) Object.assign(b, patch);
+        if (b) {
+          if ('rating_open' in patch && patch.rating_open !== b.rating_open) {
+            patch = { ...patch, rating_closed_at: patch.rating_open ? null : new Date().toISOString() };
+          }
+          Object.assign(b, patch);
+        }
         save(d);
       },
       async deleteBook(id) {
@@ -90,6 +107,7 @@
         d.ratings = d.ratings.filter((r) => r.id !== id);
         save(d);
       },
+      async isAdmin() { return true; }, // on one device, you are the admin
     };
   }
 
@@ -102,6 +120,10 @@
       async deleteBook(id) { check(await sb.from('books').delete().eq('id', id)); },
       async saveRating(r) { check(await sb.from('ratings').upsert(r, { onConflict: 'book_id,user_id' })); },
       async deleteRating(id) { check(await sb.from('ratings').delete().eq('id', id)); },
+      async isAdmin(userId) {
+        const { data, error } = await sb.from('club_admins').select('user_id').eq('user_id', userId);
+        return !error && data.length > 0;
+      },
     };
   }
 
@@ -110,13 +132,15 @@
   let sb; // Supabase client (shared mode only)
   const state = {
     books: [],
-    user: null, // the signed-in Supabase user (shared mode only)
+    user: null,       // the signed-in Supabase user (shared mode only)
+    isAdmin: false,
     member: SHARED ? '' : readLocal('bookclub-member', ''),
+    view: 'books',    // 'books' | 'stats'
     filter: '',
     sort: readLocal('bookclub-sort', 'recent'),
     openBookId: null,
     editingId: null,
-    edit: { cover: '', },
+    edit: { cover: '' },
   };
 
   function scoresOf(book) {
@@ -127,37 +151,96 @@
     return { language, content, overall, count: rs.length };
   }
 
+  // Rating round status: 'open' (members can score), 'closed' (final), 'waiting' (not started yet)
+  function statusOf(b) {
+    if (b.rating_open === false) return b.rating_closed_at ? 'closed' : 'waiting';
+    return 'open';
+  }
+
   async function refresh() {
     try {
       state.books = await store.listBooks();
-      renderList();
+      render();
       if (state.openBookId && $('#bookDialog').open) renderBook();
     } catch (e) {
       toast('Could not load books: ' + e.message, true);
     }
   }
 
-  // ---------- Rendering: list ----------
-  function coverHtml(book, cls = '') {
-    const style = `style="--h:${hue(book.title)}"`;
-    if (book.cover) return `<div class="cover ${cls}" ${style}><img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>`;
-    return `<div class="cover ${cls}" ${style}>${esc(book.title || 'No cover')}</div>`;
+  // In shared mode a score belongs to a login; on one device it belongs to a name.
+  function isMine(r) {
+    return SHARED ? Boolean(state.user) && r.user_id === state.user.id : r.member === state.member;
+  }
+  // The person who added a book, or the admin, may delete it (the database enforces this too).
+  function canDelete(b) {
+    return !SHARED || state.isAdmin || (state.user && b.added_by_id === state.user.id);
   }
 
-  function renderOverview() {
-    const el = $('#overview');
-    const rated = state.books.map((b) => ({ b, s: scoresOf(b) })).filter((x) => x.s.count);
-    el.hidden = state.books.length === 0;
-    if (el.hidden) return;
-    const clubAvg = avg(rated.map((x) => x.s.overall));
-    const top = rated.sort((a, b) => b.s.overall - a.s.overall)[0];
-    const total = state.books.length;
-    el.innerHTML = `
-      <div class="stat"><div class="k">Books read</div><div class="v">${total}</div></div>
-      <div class="stat"><div class="k">Club average</div><div class="v">${fmt(clubAvg)} <small>/ 5</small></div></div>
-      <div class="stat"><div class="k">Top rated</div>${top
-        ? `<div class="v title">${esc(top.b.title)}</div><div class="sub">★ ${fmt(top.s.overall)} overall</div>`
-        : `<div class="v title">–</div><div class="sub">Score a book to see it here</div>`}</div>`;
+  // ---------- Views ----------
+  function setView(view) {
+    state.view = view === 'stats' ? 'stats' : 'books';
+    $('#booksView').hidden = state.view !== 'books';
+    $('#statsView').hidden = state.view !== 'stats';
+    document.querySelectorAll('[data-view]').forEach((t) => {
+      const on = t.dataset.view === state.view;
+      t.classList.toggle('on', on);
+      t.setAttribute('aria-current', on ? 'page' : 'false');
+    });
+    render();
+    window.scrollTo({ top: 0 });
+  }
+
+  function render() {
+    if (state.view === 'stats') renderStats();
+    else renderBooks();
+  }
+
+  // ---------- Rendering: books page ----------
+  function coverHtml(book, cls = '') {
+    const style = `style="--h:${hue(book.title)}"`;
+    const fallback = `<span class="cover-title">${esc(book.title || 'No cover')}</span>`;
+    // If a cover link breaks, the image removes itself and the coloured title cover shows instead
+    if (book.cover) return `<div class="cover ${cls}" ${style}>${fallback}<img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>`;
+    return `<div class="cover ${cls}" ${style}>${fallback}</div>`;
+  }
+
+  function statusBadge(b) {
+    const s = statusOf(b);
+    if (s === 'open') return '<span class="badge open"><i></i>Rating open</span>';
+    if (s === 'waiting') return '<span class="badge waiting">Not started</span>';
+    return '';
+  }
+
+  function renderHero() {
+    const name = cfg.clubName || 'Book Club';
+    const rated = state.books.filter((b) => scoresOf(b).count);
+    const scores = state.books.reduce((n, b) => n + (b.ratings || []).length, 0);
+    $('#heroTitle').textContent = name;
+    $('#heroMeta').textContent = state.books.length
+      ? `${plural(state.books.length, 'book', 'books')} · ${plural(scores, 'score', 'scores')} · ${plural(rated.length, 'book rated', 'books rated')}`
+      : '';
+  }
+
+  function renderOpenStrip() {
+    const open = state.books.filter((b) => statusOf(b) === 'open')
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const wrap = $('#openSection');
+    wrap.hidden = open.length === 0;
+    if (!open.length) return;
+    $('#openCount').textContent = open.length;
+    $('#openList').innerHTML = open.map((b, i) => {
+      const mine = (b.ratings || []).find(isMine);
+      const n = (b.ratings || []).length;
+      return `<button class="open-card${mine ? ' done' : ''}" type="button" data-id="${esc(b.id)}" style="--i:${i}">
+        ${coverHtml(b, 'mini')}
+        <span class="open-info">
+          <strong>${esc(b.title)}</strong>
+          <small>${esc(b.author || '')}</small>
+          <small class="open-progress">${n ? plural(n, 'score', 'scores') + ' so far' : 'No scores yet'}</small>
+        </span>
+        <span class="open-cta">${mine ? '✓ Rated' : 'Rate now'}</span>
+      </button>`;
+    }).join('');
   }
 
   function sortBooks(list) {
@@ -173,7 +256,9 @@
     });
   }
 
-  function renderList() {
+  function renderBooks() {
+    renderHero();
+    renderOpenStrip();
     const q = state.filter.trim().toLowerCase();
     const list = sortBooks(state.books.filter((b) => !q || `${b.title} ${b.author || ''}`.toLowerCase().includes(q)));
 
@@ -187,7 +272,7 @@
            </div>`
         : `<p class="unrated">Not scored yet</p>`;
       return `<button class="card" type="button" data-id="${esc(b.id)}" style="--i:${Math.min(i, 12)}">
-          ${coverHtml(b)}
+          <span class="cover-wrap">${coverHtml(b)}${statusBadge(b)}</span>
           <div class="card-body">
             <h3>${esc(b.title)}</h3>
             ${b.author ? `<p class="author">${esc(b.author)}</p>` : ''}
@@ -196,9 +281,93 @@
         </button>`;
     }).join('');
 
+    $('#shelfSection').hidden = state.books.length === 0;
     $('#empty').hidden = state.books.length > 0;
     if (q && !list.length) grid.innerHTML = '<p class="muted">No books in your list match that search.</p>';
-    renderOverview();
+  }
+
+  // ---------- Rendering: statistics page ----------
+  function renderStats() {
+    const el = $('#statsBody');
+    const rated = state.books.map((b) => ({ b, s: scoresOf(b) })).filter((x) => x.s.count);
+    if (!rated.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-art" aria-hidden="true">📊</div>
+        <p class="empty-title">No statistics yet</p>
+        <p>Once the club has scored a book, the top lists show up here.</p></div>`;
+      return;
+    }
+    const allRatings = state.books.flatMap((b) => b.ratings || []);
+    const members = new Map();
+    allRatings.forEach((r) => members.set(SHARED ? r.user_id : r.member, r.member));
+    const clubAvg = avg(rated.map((x) => x.s.overall));
+    const by = (key) => rated.slice().sort((a, b) => b.s[key] - a.s[key] || b.s.count - a.s.count);
+
+    const row = (x, i, key) => `
+      <li><button type="button" class="rank-row" data-id="${esc(x.b.id)}" style="--i:${i}">
+        <span class="rank r${i + 1}">${i + 1}</span>
+        ${coverHtml(x.b, 'mini')}
+        <span class="rank-info">
+          <strong>${esc(x.b.title)}</strong>
+          <small>${esc(x.b.author || '')}${statusOf(x.b) === 'open' ? ' · <em>still open</em>' : ''}</small>
+          ${key === 'overall' ? `<span class="bars">
+            <span class="bar"><span class="bar-lbl">Language</span><span class="track"><i style="--v:${x.s.language}"></i></span><b>${fmt(x.s.language)}</b></span>
+            <span class="bar"><span class="bar-lbl">Content</span><span class="track"><i style="--v:${x.s.content}" class="alt"></i></span><b>${fmt(x.s.content)}</b></span>
+          </span>` : ''}
+        </span>
+        <span class="rank-score">${fmt(x.s[key])}<small>${plural(x.s.count, 'score', 'scores')}</small></span>
+      </button></li>`;
+
+    // Most divided: biggest gap between the highest and lowest member score
+    const divided = rated.filter((x) => x.s.count >= 2).map((x) => {
+      const o = x.b.ratings.map((r) => (r.language + r.content) / 2);
+      return { ...x, spread: Math.max(...o) - Math.min(...o) };
+    }).filter((x) => x.spread > 0).sort((a, b) => b.spread - a.spread).slice(0, 3);
+
+    const readers = [...members.entries()].map(([key, name]) => ({
+      name, n: allRatings.filter((r) => (SHARED ? r.user_id : r.member) === key).length,
+    })).sort((a, b) => b.n - a.n).slice(0, 5);
+    const maxN = readers[0] ? readers[0].n : 1;
+
+    el.innerHTML = `
+      <div class="overview">
+        <div class="stat"><div class="k">Books read</div><div class="v">${state.books.length}</div></div>
+        <div class="stat"><div class="k">Scores given</div><div class="v">${allRatings.length}</div></div>
+        <div class="stat"><div class="k">Members scoring</div><div class="v">${members.size}</div></div>
+        <div class="stat accent"><div class="k">Club average</div><div class="v">${fmt(clubAvg)} <small>/ 5</small></div></div>
+      </div>
+
+      <section class="stats-card">
+        <h2>🏆 Top rated books</h2>
+        <p class="muted">Average of Language and Content from everyone's scores.</p>
+        <ol class="rank-list">${by('overall').slice(0, 10).map((x, i) => row(x, i, 'overall')).join('')}</ol>
+      </section>
+
+      <div class="stats-grid">
+        <section class="stats-card">
+          <h2>✍️ Best language</h2>
+          <ol class="rank-list compact">${by('language').slice(0, 3).map((x, i) => row(x, i, 'language')).join('')}</ol>
+        </section>
+        <section class="stats-card">
+          <h2>💡 Best content</h2>
+          <ol class="rank-list compact">${by('content').slice(0, 3).map((x, i) => row(x, i, 'content')).join('')}</ol>
+        </section>
+        ${divided.length ? `<section class="stats-card">
+          <h2>⚡ Most divided opinions</h2>
+          <p class="muted">Biggest gap between the highest and lowest score.</p>
+          <ol class="rank-list compact">${divided.map((x, i) => `
+            <li><button type="button" class="rank-row" data-id="${esc(x.b.id)}" style="--i:${i}">
+              <span class="rank">${i + 1}</span>${coverHtml(x.b, 'mini')}
+              <span class="rank-info"><strong>${esc(x.b.title)}</strong><small>${esc(x.b.author || '')}</small></span>
+              <span class="rank-score">${fmt(x.spread)}<small>point gap</small></span>
+            </button></li>`).join('')}</ol>
+        </section>` : ''}
+        <section class="stats-card">
+          <h2>📚 Most active readers</h2>
+          <ul class="reader-list">${readers.map((r) => `
+            <li>${avatarHtml(r.name)}<span class="reader-name">${esc(r.name)}</span>
+              <span class="track"><i style="--v:${(r.n / maxN) * 5}"></i></span><b>${r.n}</b></li>`).join('')}</ul>
+        </section>
+      </div>`;
   }
 
   // ---------- Rendering: book detail ----------
@@ -208,13 +377,49 @@
     </div>`;
   }
 
+  function roundPanel(b, s, mine) {
+    const status = statusOf(b);
+    const adminBtn = !state.isAdmin ? '' : status === 'open'
+      ? '<button class="btn small" type="button" data-action="close-rating">🔒 Close rating</button>'
+      : `<button class="btn small" type="button" data-action="open-rating">${status === 'closed' ? '🔓 Reopen rating' : '▶ Start rating'}</button>`;
+
+    if (status === 'open') {
+      return `<form class="panel round open" id="rateForm">
+        <div class="round-head">
+          <span class="badge open"><i></i>Rating open</span>
+          <span class="muted small">${s.count ? plural(s.count, 'member has', 'members have') + ' scored' : 'Be the first to score'}</span>
+          ${adminBtn}
+        </div>
+        <h3 class="section-title">${mine ? 'Your score' : 'Give your score'}</h3>
+        <div class="rate-row"><span class="label">Language<span class="hint">How well is it written?</span></span>${pickerHtml('language', mine?.language)}</div>
+        <div class="rate-row"><span class="label">Content<span class="hint">Story, ideas and characters</span></span>${pickerHtml('content', mine?.content)}</div>
+        <textarea id="rateComment" rows="2" maxlength="1000" placeholder="A few words about the book (optional)">${esc(mine?.comment || '')}</textarea>
+        <div class="dialog-actions">
+          ${mine ? `<button class="btn ghost danger small" type="button" data-action="delete-rating" data-id="${esc(mine.id)}">Remove my score</button>` : ''}
+          <button class="btn primary" type="submit">${mine ? 'Update score' : 'Save score'}</button>
+        </div>
+      </form>`;
+    }
+    if (status === 'waiting') {
+      return `<div class="panel round">
+        <div class="round-head"><span class="badge waiting">Not started</span>${adminBtn}</div>
+        <p class="muted">Rating hasn't started for this book yet. ${state.isAdmin ? 'Start it when the club is ready.' : 'The admin will open it when the club is ready.'}</p>
+      </div>`;
+    }
+    return `<div class="panel round closed">
+      <div class="round-head"><span class="badge closed">🔒 Rating closed</span>
+        <span class="muted small">${b.rating_closed_at ? 'on ' + esc(fmtDate(b.rating_closed_at)) : ''}</span>${adminBtn}</div>
+      <p class="muted">${s.count ? `Final score from ${plural(s.count, 'member', 'members')}.` : 'Nobody scored this book before rating closed.'}${mine ? ` You gave Language ${mine.language} and Content ${mine.content}.` : ''}</p>
+    </div>`;
+  }
+
   function renderBook() {
     const b = state.books.find((x) => x.id === state.openBookId);
     if (!b) { $('#bookDialog').close(); return; }
     const s = scoresOf(b);
     const mine = (b.ratings || []).find(isMine);
     const others = (b.ratings || []).slice().sort((x, y) => (isMine(x) ? -1 : isMine(y) ? 1 : x.member.localeCompare(y.member)));
-    const tags = [b.year ? `Published ${b.year}` : '', b.read_on ? `Read ${fmtDate(b.read_on)}` : '', b.added_by ? `Added by ${b.added_by}` : '']
+    const tags = [b.year ? `Published ${b.year}` : '', b.read_on ? `Read ${fmtMonth(b.read_on)}` : '', b.added_by ? `Added by ${b.added_by}` : '']
       .filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
     const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmt(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
 
@@ -237,19 +442,10 @@
       <div class="averages">
         ${avgBox(s.language, 'Language')}
         ${avgBox(s.content, 'Content')}
-        ${avgBox(s.overall, 'Overall', 'main')}
+        ${avgBox(s.overall, statusOf(b) === 'closed' ? 'Final score' : 'Overall', 'main')}
       </div>
 
-      <form class="panel" id="rateForm">
-        <h3 class="section-title">${mine ? 'Your score' : 'Give your score'}</h3>
-        <div class="rate-row"><span class="label">Language<span class="hint">How well is it written?</span></span>${pickerHtml('language', mine?.language)}</div>
-        <div class="rate-row"><span class="label">Content<span class="hint">Story, ideas and characters</span></span>${pickerHtml('content', mine?.content)}</div>
-        <textarea id="rateComment" rows="2" maxlength="1000" placeholder="A few words about the book (optional)">${esc(mine?.comment || '')}</textarea>
-        <div class="dialog-actions">
-          ${mine ? `<button class="btn ghost danger small" type="button" data-action="delete-rating" data-id="${esc(mine.id)}">Remove my score</button>` : ''}
-          <button class="btn primary" type="submit">${mine ? 'Update score' : 'Save score'}</button>
-        </div>
-      </form>
+      ${roundPanel(b, s, mine)}
 
       <div class="panel">
         <h3 class="section-title">Club scores (${s.count})</h3>
@@ -261,7 +457,7 @@
                 <span>Language ${esc(r.language)} · Content ${esc(r.content)}</span></div>
               ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
             </div>
-          </li>`).join('')}</ul>` : '<p class="muted">Nobody has scored this book yet. Be the first!</p>'}
+          </li>`).join('')}</ul>` : '<p class="muted">Nobody has scored this book yet.</p>'}
       </div>
 
       ${b.description ? `<details><summary>About the book</summary><p>${esc(b.description)}</p></details>` : ''}
@@ -270,15 +466,6 @@
         ${canDelete(b) ? '<button class="btn ghost danger" type="button" data-action="delete-book">Delete book</button>' : ''}
         <button class="btn" type="button" data-action="edit-book">Edit book</button>
       </div>`;
-  }
-
-  // In shared mode a score belongs to a login; on one device it belongs to a name.
-  function isMine(r) {
-    return SHARED ? Boolean(state.user) && r.user_id === state.user.id : r.member === state.member;
-  }
-  // Only the person who added a book may delete it (the database enforces this too).
-  function canDelete(b) {
-    return !SHARED || (state.user && b.added_by_id === state.user.id);
   }
 
   function openBook(id) {
@@ -300,6 +487,8 @@
     state.editingId = book ? book.id : null;
     $('#editTitle').textContent = book ? 'Edit book' : 'Add a book';
     $('#searchSection').hidden = Boolean(book);
+    $('#startRatingRow').hidden = Boolean(book);
+    $('#fStartRating').checked = true;
     $('#searchResults').innerHTML = '';
     $('#searchInput').value = '';
     $('#fTitle').value = book?.title || '';
@@ -331,15 +520,50 @@
     });
   }
 
-  // ---------- Search the internet (Open Library + Google Books, both free, no key) ----------
+  // ---------- Search the internet ----------
+  // Apple Books (Danish store) finds Danish titles with covers; Open Library and
+  // Google Books add international titles and original publishing years.
   let lastResults = [];
 
+  // Apple's Danish store also sells English books, so guess the language from the text
+  function looksDanish(text) {
+    const words = String(text).toLowerCase().match(/[a-zæøå]+/g) || [];
+    const da = new Set(['og', 'ikke', 'det', 'der', 'hun', 'han', 'som', 'med', 'til', 'på', 'af', 'er', 'en', 'et', 'hans', 'hendes', 'bliver', 'om']);
+    const en = new Set(['the', 'and', 'of', 'to', 'is', 'in', 'her', 'his', 'with', 'a', 'that', 'she', 'he', 'for']);
+    let d = 0, e = 0;
+    words.forEach((w) => { if (da.has(w)) d++; else if (en.has(w)) e++; });
+    return /[æøå]/i.test(text) ? d >= e : d > e;
+  }
+
+  const getJson = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+
   async function searchOnline(q) {
-    const enc = encodeURIComponent(q);
-    const [ol, gb] = await Promise.allSettled([
-      fetch(`https://openlibrary.org/search.json?q=${enc}&limit=8&fields=key,title,author_name,first_publish_year,cover_i`).then((r) => r.json()),
-      fetch(`https://www.googleapis.com/books/v1/volumes?q=${enc}&maxResults=8&printType=books`).then((r) => r.json()),
+    const isbn = q.replace(/[-\s]/g, '');
+    const isIsbn = /^(97[89])?\d{9}[\dXx]$/.test(isbn);
+    const enc = encodeURIComponent(isIsbn ? isbn : q);
+    const gKey = cfg.googleBooksApiKey ? `&key=${encodeURIComponent(cfg.googleBooksApiKey)}` : '';
+
+    const [apple, ol, gb] = await Promise.allSettled([
+      isIsbn ? Promise.resolve({ results: [] })
+        : getJson(`https://itunes.apple.com/search?term=${enc}&media=ebook&country=dk&limit=15`),
+      getJson(`https://openlibrary.org/search.json?${isIsbn ? 'isbn' : 'q'}=${enc}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,language`),
+      getJson(`https://www.googleapis.com/books/v1/volumes?q=${isIsbn ? 'isbn:' : ''}${enc}&maxResults=10&printType=books&country=DK${gKey}`),
     ]);
+
+    const fromApple = apple.status === 'fulfilled' ? (apple.value.results || [])
+      .filter((x) => !/\b(summary|study guide|analysis|resumé)\b/i.test(x.trackName || ''))
+      .map((x) => {
+        const description = plainText(x.description);
+        return {
+          title: x.trackName,
+          author: x.artistName || '',
+          year: null, // Apple gives the e-book's date, not the first edition; Open Library fills this in when it can
+          cover: (x.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, '/600x900bb.'),
+          description,
+          danish: looksDanish(`${x.trackName} ${description}`),
+          source: 'Apple Books',
+        };
+      }) : [];
 
     const fromOL = ol.status === 'fulfilled' ? (ol.value.docs || []).map((d) => ({
       title: d.title,
@@ -347,6 +571,7 @@
       year: d.first_publish_year || null,
       cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : '',
       description: '',
+      danish: (d.language || [])[0] === 'dan',
       source: 'Open Library',
     })) : [];
 
@@ -357,57 +582,73 @@
         title: v.subtitle ? `${v.title}: ${v.subtitle}` : v.title,
         author: (v.authors || []).slice(0, 2).join(', '),
         year: v.publishedDate ? parseInt(v.publishedDate, 10) || null : null,
-        cover: thumb.replace(/^http:/, 'https:').replace('&edge=curl', ''),
-        description: v.description || '',
+        cover: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') + '&fife=w600' : '',
+        description: plainText(v.description),
+        danish: v.language === 'da',
         source: 'Google Books',
       };
     }) : [];
 
-    if (ol.status === 'rejected' && gb.status === 'rejected') throw new Error('Search is not reachable right now. Check your internet connection.');
+    if ([apple, ol, gb].every((x) => x.status === 'rejected')) {
+      throw new Error('Search is not reachable right now. Check your internet connection.');
+    }
 
-    // Mix the two sources and drop duplicates.
-    const seen = new Set();
-    const out = [];
-    for (let i = 0; i < Math.max(fromGB.length, fromOL.length); i++) {
-      for (const r of [fromGB[i], fromOL[i]]) {
+    // Merge: same title + first author counts as one book; keep the best cover,
+    // the earliest year and any description. Danish results first.
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9æøå]/g, '');
+    const map = new Map();
+    const order = [];
+    const lists = [fromApple, fromGB, fromOL];
+    const longest = Math.max(...lists.map((l) => l.length));
+    for (let i = 0; i < longest; i++) {
+      for (const list of lists) {
+        const r = list[i];
         if (!r || !r.title) continue;
-        const key = (r.title + '|' + (r.author.split(',')[0] || '')).toLowerCase().replace(/[^a-z0-9æøåäöü|]/g, '');
-        if (seen.has(key)) {
-          // Keep the richer one: fill in a missing cover/description
-          const prev = out.find((x) => x._key === key);
-          if (prev && !prev.cover && r.cover) prev.cover = r.cover;
-          if (prev && !prev.description && r.description) prev.description = r.description;
-          continue;
-        }
-        seen.add(key);
-        out.push({ ...r, _key: key });
+        const key = norm(r.title.split(':')[0]) + '|' + norm((r.author.split(',')[0] || '').split(' ').pop());
+        const prev = map.get(key);
+        if (!prev) { map.set(key, { ...r }); order.push(key); continue; }
+        if (!prev.cover && r.cover) prev.cover = r.cover;
+        if (!prev.description && r.description) prev.description = r.description;
+        if (r.year && (!prev.year || r.year < prev.year)) prev.year = r.year;
+        prev.danish = prev.danish || r.danish;
       }
     }
-    return out;
+    const out = order.map((k) => map.get(k));
+    // Books with a cover first, then Danish ones, keeping the search order otherwise
+    return out.map((r, i) => ({ r, i }))
+      .sort((a, b) => (!!b.r.cover - !!a.r.cover) || (b.r.danish - a.r.danish) || a.i - b.i)
+      .map((x) => x.r).slice(0, 20);
   }
 
   function renderResults(results) {
     lastResults = results;
     $('#searchResults').innerHTML = results.length
-      ? results.map((r, i) => `<button class="result" type="button" data-result="${i}" style="--i:${i}">
+      ? results.map((r, i) => `<button class="result" type="button" data-result="${i}" style="--i:${Math.min(i, 10)}">
           ${coverHtml(r)}
           <div><strong>${esc(r.title)}</strong><small>${esc([r.author, r.year].filter(Boolean).join(' · '))}</small></div>
-          <span class="src">${esc(r.source)}</span>
+          <span class="src">${r.danish ? '<span class="flag" title="Danish">🇩🇰</span>' : ''}${esc(r.source)}</span>
         </button>`).join('')
       : '<p class="muted">No books found. Try other words, or fill in the details below.</p>';
   }
 
-  // ---------- Member name ----------
+  // ---------- Member name / account ----------
   function askName() {
     $('#nameInput').value = state.member;
     if (SHARED) {
       $('#nameTitle').textContent = 'Your account';
       $('#nameLead').textContent = 'Your name is shown next to the scores you give.';
-      $('#accountEmail').textContent = state.user ? `Signed in as ${state.user.email}` : '';
+      $('#accountEmail').innerHTML = state.user
+        ? `Signed in as ${esc(state.user.email)}${state.isAdmin ? ' <span class="badge admin">Admin</span>' : ''}` : '';
       $('#accountEmail').hidden = !state.user;
       $('#signOutBtn').hidden = false;
     }
     $('#nameDialog').showModal();
+  }
+
+  function renderMember() {
+    $('#memberBtn').innerHTML = state.member
+      ? `${avatarHtml(state.member)}<span class="chip-name">${esc(state.member)}</span>`
+      : '<span class="chip-name" style="padding-left:7px">Set name</span>';
   }
 
   // ---------- Sign in / create account (shared mode) ----------
@@ -468,19 +709,24 @@
     $('#authView').hidden = true;
   }
 
-  function applySession(session) {
+  async function applySession(session) {
     state.user = session ? session.user : null;
     if (!state.user) {
       lastUserId = null;
       state.member = '';
       state.books = [];
+      state.isAdmin = false;
       showAuth(authMode === 'signup' ? 'signup' : 'signin');
       return;
     }
     state.member = displayName(state.user);
     renderMember();
     hideAuth();
-    if (state.user.id !== lastUserId) { lastUserId = state.user.id; refresh(); }
+    if (state.user.id !== lastUserId) {
+      lastUserId = state.user.id;
+      state.isAdmin = await store.isAdmin(state.user.id);
+      refresh();
+    }
   }
 
   async function submitAuth(e) {
@@ -524,25 +770,26 @@
       btn.disabled = false;
     }
   }
-  function renderMember() {
-    $('#memberBtn').innerHTML = state.member
-      ? `${avatarHtml(state.member)}<span class="chip-name">${esc(state.member)}</span>`
-      : '<span class="chip-name" style="padding-left:7px">Set name</span>';
-  }
 
   // ---------- Events ----------
   function bindEvents() {
     $('#addBtn').addEventListener('click', () => openEdit(null));
     $('#memberBtn').addEventListener('click', askName);
-    $('#filter').addEventListener('input', (e) => { state.filter = e.target.value; renderList(); });
+    $('#filter').addEventListener('input', (e) => { state.filter = e.target.value; renderBooks(); });
     $('#sort').value = state.sort;
-    $('#sort').addEventListener('change', (e) => { state.sort = e.target.value; writeLocal('bookclub-sort', state.sort); renderList(); });
+    $('#sort').addEventListener('change', (e) => { state.sort = e.target.value; writeLocal('bookclub-sort', state.sort); renderBooks(); });
 
-    $('#grid').addEventListener('click', (e) => {
-      const card = e.target.closest('.card');
-      if (card) openBook(card.dataset.id);
-    });
+    // Views (Books / Statistics)
+    document.querySelectorAll('[data-view]').forEach((t) => t.addEventListener('click', (e) => {
+      e.preventDefault();
+      history.replaceState(null, '', t.dataset.view === 'stats' ? '#stats' : location.pathname);
+      setView(t.dataset.view);
+    }));
+
+    // Open a book from the shelf, the "open for rating" strip or the statistics
     document.addEventListener('click', (e) => {
+      const card = e.target.closest('.card[data-id], .open-card[data-id], .rank-row[data-id]');
+      if (card) { openBook(card.dataset.id); return; }
       if (e.target.closest('[data-action="add"]')) openEdit(null);
       const closer = e.target.closest('[data-close]');
       if (closer) closer.closest('dialog').close();
@@ -578,7 +825,7 @@
     document.querySelectorAll('#authView [data-auth-mode]').forEach((b) =>
       b.addEventListener('click', () => setAuthMode(b.dataset.authMode)));
 
-    // Book detail: star pickers, save score, edit/delete
+    // Book detail: star pickers, save score, rating round, edit/delete
     const body = $('#bookBody');
     body.addEventListener('click', async (e) => {
       const star = e.target.closest('.picker button');
@@ -597,8 +844,17 @@
       }
       const action = e.target.closest('[data-action]')?.dataset.action;
       const book = state.books.find((x) => x.id === state.openBookId);
-      if (!book) return;
+      if (!book || !action) return;
       if (action === 'edit-book') { $('#bookDialog').close(); openEdit(book); }
+      if (action === 'close-rating' || action === 'open-rating') {
+        const open = action === 'open-rating';
+        if (!open && !confirm(`Close rating for "${book.title}"? Members can't change their scores after this.`)) return;
+        try {
+          await store.updateBook(book.id, { rating_open: open });
+          toast(open ? 'Rating is open' : 'Rating closed. Final score is in!');
+          await refresh();
+        } catch (err) { toast('Could not change rating: ' + err.message, true); }
+      }
       if (action === 'delete-book') {
         if (!confirm(`Delete "${book.title}" and all its scores? This cannot be undone.`)) return;
         try { await store.deleteBook(book.id); $('#bookDialog').close(); toast('Book deleted'); await refresh(); }
@@ -624,7 +880,7 @@
         toast('Score saved');
         await refresh();
       } catch (err) {
-        toast('Could not save score: ' + err.message, true);
+        toast('Could not save score: ' + (/row-level security/i.test(err.message) ? 'rating for this book is closed.' : err.message), true);
         btn.disabled = false;
       }
     });
@@ -685,8 +941,9 @@
           await refresh();
           openBook(state.editingId);
         } else {
-          const row = await store.addBook({ ...data, added_by: state.member || null });
-          toast('Book added');
+          const startNow = $('#fStartRating').checked;
+          const row = await store.addBook({ ...data, added_by: state.member || null, ...(startNow ? {} : { rating_open: false }) });
+          toast(startNow ? 'Book added. Rating is open!' : 'Book added');
           $('#editDialog').close();
           await refresh();
           openBook(row.id);
@@ -712,6 +969,7 @@
     document.title = name;
     renderMember();
     bindEvents();
+    setView(location.hash === '#stats' ? 'stats' : 'books');
 
     if (SHARED) {
       try {
@@ -734,6 +992,7 @@
     }
 
     store = localStore();
+    state.isAdmin = true;
     const n = $('#modeNotice');
     n.textContent = 'Books are saved on this device only. Connect the free Supabase database (see README) so club members can create a login and share one list.';
     n.hidden = false;

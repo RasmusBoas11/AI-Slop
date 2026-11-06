@@ -1,6 +1,6 @@
 {
-  "name": "Book Club",
-  "short_name": "Book Club",
+  "name": "Holtebois Book Club",
+  "short_name": "Holtebois",
   "description": "Track the books our club has read and score them on language and content.",
   "start_url": "./",
   "scope": "./",

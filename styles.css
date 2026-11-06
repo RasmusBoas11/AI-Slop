@@ -87,7 +87,7 @@ img { display: block; }
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand img { border-radius: 10px; box-shadow: var(--shadow-sm); }
-.brand h1 { font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand-name { font-weight: 600; letter-spacing: -.02em; font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 main { max-width: 1120px; margin: 0 auto; padding: 20px 16px 96px; }
@@ -161,7 +161,7 @@ label > input, label > textarea { color: var(--text); font-weight: 400; font-siz
   border-radius: 12px; padding: 10px 14px; margin: 0 0 20px;
   font-size: .85rem; background: var(--accent-soft); color: var(--text);
 }
-.overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 22px; }
+.overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
 .stat {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 16px 18px; box-shadow: var(--shadow-sm); min-width: 0;
@@ -359,7 +359,7 @@ details p { white-space: pre-wrap; margin: 10px 0 0; color: var(--muted); font-s
    Phones: bottom sheets, two-column shelf, floating add button
    ============================================================ */
 @media (max-width: 600px) {
-  .brand h1 { font-size: 1.12rem; }
+  .brand-name { font-size: 1.12rem; }
   .brand img { width: 32px; height: 32px; }
   .chip { max-width: 120px; }
   #addBtn { display: none; }
@@ -367,7 +367,6 @@ details p { white-space: pre-wrap; margin: 10px 0 0; color: var(--muted); font-s
 
   main { padding-top: 16px; }
   .overview { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .overview .stat:nth-child(3) { grid-column: 1 / -1; }
   .stat { padding: 14px; }
   .stat .v { font-size: 1.6rem; }
   .toolbar { flex-direction: column; }
@@ -417,3 +416,172 @@ body.signed-out .topbar { display: none; }
 .link { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: .88rem; cursor: pointer; justify-self: center; padding: 4px; }
 .link:hover { text-decoration: underline; }
 .account-email { font-size: .88rem; }
+
+/* ============================================================
+   Page tabs (Books / Statistics)
+   ============================================================ */
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 12px; }
+.tab {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 9px;
+  color: var(--muted); text-decoration: none; font-weight: 600; font-size: .9rem;
+  transition: background-color .2s, color .2s, box-shadow .2s;
+}
+.tab:hover { color: var(--text); }
+.tab.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border); }
+
+/* ============================================================
+   Hero header
+   ============================================================ */
+.hero { padding: 28px 0 30px; animation: rise .5s var(--ease) both; }
+.hero-kicker { margin: 0 0 6px; color: var(--muted); font-weight: 600; font-size: .85rem; letter-spacing: .04em; text-transform: uppercase; }
+.hero-title {
+  font-size: clamp(2.3rem, 7vw, 4rem); line-height: 1.02; letter-spacing: -.045em; font-weight: 700;
+  background: linear-gradient(100deg, var(--accent) 10%, var(--accent-2) 70%, #f2a516 110%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  padding-bottom: .06em;
+}
+.hero-sub { margin: 10px 0 0; font-size: 1.1rem; color: var(--muted); }
+.hero-meta { margin: 14px 0 0; display: inline-block; font-size: .85rem; font-weight: 600; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; }
+.hero-meta:empty { display: none; }
+
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
+.section-head h2 { font-size: 1.25rem; display: flex; align-items: center; gap: 8px; }
+.section-head .count { font-size: .9rem; color: var(--muted); font-weight: 600; }
+.section-head .muted { font-size: .88rem; width: 100%; }
+#shelfSection { margin-top: 8px; }
+
+/* ============================================================
+   Rating status badges
+   ============================================================ */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  font-size: .75rem; font-weight: 700; letter-spacing: .01em; white-space: nowrap; font-family: var(--font-sans);
+}
+.badge.open { background: color-mix(in srgb, #16a34a 14%, var(--surface)); color: #15803d; }
+.badge.open i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); animation: pulse 1.8s infinite; }
+.badge.waiting { background: var(--surface-2); color: var(--muted); }
+.badge.closed { background: var(--surface-2); color: var(--text); }
+.badge.admin { background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
+@media (prefers-color-scheme: dark) {
+  .badge.open { background: rgba(34, 197, 94, .14); color: #4ade80; }
+}
+@keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+
+.cover-wrap { position: relative; display: block; }
+.cover-wrap .badge { position: absolute; left: 8px; top: 8px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+.cover-title { position: relative; }
+
+/* ============================================================
+   "Open for rating" strip
+   ============================================================ */
+.open-section {
+  margin: 0 0 30px; padding: 18px; border-radius: 20px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), color-mix(in srgb, var(--accent-2) 7%, var(--surface)));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  animation: rise .5s var(--ease) both; animation-delay: .05s;
+}
+.open-section .section-head { margin-top: 0; }
+.open-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.open-card {
+  display: flex; align-items: center; gap: 12px; padding: 10px; text-align: left; width: 100%;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; cursor: pointer;
+  box-shadow: var(--shadow-sm); animation: rise .45s var(--ease) both; animation-delay: calc(var(--i, 0) * 50ms);
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+}
+.open-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.open-info { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.open-info strong { font-size: .98rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-info small { color: var(--muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-info .open-progress { color: var(--text); font-weight: 500; }
+.open-cta { flex-shrink: 0; padding: 7px 12px; border-radius: 10px; background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: .82rem; }
+.open-card.done .open-cta { background: color-mix(in srgb, #16a34a 14%, var(--surface)); color: #15803d; }
+.cover.mini { width: 46px; font-size: .5rem; padding: 6px; border-radius: 5px; box-shadow: var(--shadow-sm); }
+
+/* ============================================================
+   Rating round panel (book details)
+   ============================================================ */
+.round-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.round-head .btn { margin-left: auto; }
+.round.open { border-color: color-mix(in srgb, #22c55e 35%, var(--border)); }
+.round.closed { background: var(--surface-2); border-color: transparent; }
+.small { font-size: .85rem; }
+
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px; background: var(--accent-soft); cursor: pointer; color: var(--text); }
+.check input { width: 18px; height: 18px; min-height: 0; margin: 2px 0 0; accent-color: var(--accent); flex-shrink: 0; }
+.check span { display: grid; gap: 2px; font-weight: 400; }
+.check small { color: var(--muted); font-size: .82rem; }
+.flag { margin-right: 5px; }
+
+/* ============================================================
+   Statistics page
+   ============================================================ */
+.page-head { padding: 26px 0 22px; animation: rise .5s var(--ease) both; }
+.page-head h1 { font-size: clamp(2rem, 6vw, 2.8rem); letter-spacing: -.04em; }
+.page-head .muted { margin-top: 6px; }
+.stat.accent { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+.stat.accent .k, .stat.accent .v small { color: rgba(255, 255, 255, .8); }
+.stats-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px;
+  box-shadow: var(--shadow-sm); margin-bottom: 16px; animation: rise .5s var(--ease) both;
+}
+.stats-card h2 { font-size: 1.15rem; }
+.stats-card > .muted { font-size: .88rem; margin: 4px 0 6px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.stats-grid .stats-card { margin-bottom: 0; }
+.rank-list, .reader-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.rank-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; text-align: left;
+  border: 0; background: transparent; border-radius: 14px; cursor: pointer;
+  animation: rise .4s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms);
+  transition: background-color .15s;
+}
+.rank-row:hover { background: var(--surface-2); }
+.rank { flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; font-weight: 700; font-size: .85rem; background: var(--surface-2); color: var(--muted); }
+.rank.r1 { background: linear-gradient(135deg, #fde68a, #f59e0b); color: #78350f; }
+.rank.r2 { background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #1f2937; }
+.rank.r3 { background: linear-gradient(135deg, #fed7aa, #c2410c); color: #fff; }
+.rank-info { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.rank-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-info small { color: var(--muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-score { flex-shrink: 0; text-align: right; font-size: 1.35rem; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; display: grid; }
+.rank-score small { font-size: .72rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.bars { display: grid; gap: 3px; margin-top: 5px; max-width: 320px; }
+.bar { display: grid; grid-template-columns: 62px 1fr 26px; align-items: center; gap: 8px; font-size: .75rem; }
+.bar-lbl { color: var(--muted); }
+.bar b { font-variant-numeric: tabular-nums; text-align: right; }
+.track { display: block; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.track i { display: block; height: 100%; width: calc(var(--v, 0) / 5 * 100%); border-radius: inherit; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--accent-2))); animation: grow .8s var(--ease) both; transform-origin: left; }
+.track i.alt { background: linear-gradient(90deg, var(--accent-2), #f2a516); }
+@keyframes grow { from { transform: scaleX(0); } }
+.reader-list li { display: grid; grid-template-columns: auto minmax(70px, 120px) 1fr 28px; align-items: center; gap: 10px; padding: 6px 4px; }
+.reader-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-list b { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   Phones: tabs become a bottom bar like an iPhone app
+   ============================================================ */
+@media (max-width: 600px) {
+  /* A blurred header would trap the fixed tab bar inside it, so use a solid header on phones */
+  .topbar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg); }
+  .tabs {
+    position: fixed; z-index: 12; left: 0; right: 0; bottom: 0; border-radius: 0; gap: 0;
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: saturate(1.6) blur(16px); -webkit-backdrop-filter: saturate(1.6) blur(16px);
+    border-top: 1px solid var(--border);
+  }
+  .tab { flex: 1; flex-direction: column; gap: 2px; font-size: .7rem; padding: 6px; }
+  .tab.on { box-shadow: none; background: transparent; }
+  main { padding-bottom: 130px; }
+  .fab { bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
+  body.signed-out .tabs { display: none; }
+  .hero { padding: 18px 0 22px; }
+  .hero-sub { font-size: 1rem; }
+  .open-section { padding: 14px; margin-left: -4px; margin-right: -4px; }
+  .open-list { grid-template-columns: 1fr; }
+  .overview { grid-template-columns: 1fr 1fr; }
+  .stats-card { padding: 16px; }
+  .bars { max-width: none; }
+}

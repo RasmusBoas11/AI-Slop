@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Book Club</title>
+  <title>Holtebois Book Club</title>
   <meta name="description" content="Track the books our club has read and score them on language and content.">
   <meta name="theme-color" content="#5b5bd6">
   <!-- Lets the app be added to an iPhone home screen and open like a real app -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Book Club">
+  <meta name="apple-mobile-web-app-title" content="Holtebois">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -23,10 +23,18 @@
   <header class="topbar">
     <div class="brand">
       <img src="icon.svg" alt="" width="36" height="36">
-      <h1 id="clubName">Book Club</h1>
+      <span id="clubName" class="brand-name">Book Club</span>
     </div>
+    <nav class="tabs" aria-label="Pages">
+      <a href="#" data-view="books" class="tab on">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0A2 2 0 0 0 6 22h13"/></svg>
+        <span>Books</span></a>
+      <a href="#stats" data-view="stats" class="tab">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span>Statistics</span></a>
+    </nav>
     <div class="topbar-actions">
-      <button id="memberBtn" class="chip" type="button" title="Change your name"></button>
+      <button id="memberBtn" class="chip" type="button" title="Your account"></button>
       <button id="addBtn" class="btn primary" type="button">+ Add book</button>
     </div>
   </header>
@@ -34,8 +42,25 @@
   <main>
     <p id="modeNotice" class="notice" hidden></p>
 
-    <section id="overview" class="overview" aria-label="Club overview" hidden></section>
+    <!-- ===== Books page ===== -->
+    <div id="booksView">
+    <section class="hero">
+      <p class="hero-kicker">📚 Welcome to</p>
+      <h1 id="heroTitle" class="hero-title">Book Club</h1>
+      <p class="hero-sub">What we read, and what we thought of it.</p>
+      <p id="heroMeta" class="hero-meta"></p>
+    </section>
 
+    <section id="openSection" class="open-section" hidden>
+      <div class="section-head">
+        <h2><span class="badge open"><i></i>Open for rating</span> <span id="openCount" class="count"></span></h2>
+        <p class="muted">Give your score for Language and Content before the admin closes the rating.</p>
+      </div>
+      <div id="openList" class="open-list"></div>
+    </section>
+
+    <section id="shelfSection">
+    <div class="section-head"><h2>Our shelf</h2></div>
     <div class="toolbar">
       <div class="search">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -52,11 +77,22 @@
     </div>
 
     <div id="grid" class="grid" aria-live="polite"></div>
+    </section>
     <div id="empty" class="empty" hidden>
       <div class="empty-art" aria-hidden="true">📚</div>
       <p class="empty-title">Your shelf is empty</p>
-      <p>Add the first book your club has read — search for it online or type it in.</p>
+      <p>Add the first book your club is reading. Search for it online, then everyone can give their score.</p>
       <button class="btn primary" type="button" data-action="add">+ Add your first book</button>
+    </div>
+    </div>
+
+    <!-- ===== Statistics page ===== -->
+    <div id="statsView" hidden>
+      <section class="page-head">
+        <h1>Statistics</h1>
+        <p class="muted">The club's favourites, and who reads the most.</p>
+      </section>
+      <div id="statsBody"></div>
     </div>
   </main>
 
@@ -124,7 +160,7 @@
 
       <section id="searchSection">
         <form id="searchForm" class="search-row">
-          <input id="searchInput" type="search" placeholder="Search the internet: title, author or ISBN" aria-label="Search the internet for a book">
+          <input id="searchInput" type="search" placeholder="Title, author or ISBN (Danish books too)" aria-label="Search the internet for a book">
           <button class="btn" type="submit">Search</button>
         </form>
         <div id="searchResults" class="results"></div>
@@ -157,6 +193,10 @@
           </div>
           <label>About the book
             <textarea id="fDescription" rows="3" maxlength="4000" placeholder="Optional"></textarea>
+          </label>
+          <label id="startRatingRow" class="check">
+            <input id="fStartRating" type="checkbox" checked>
+            <span><strong>Start rating now</strong><small>Everyone can give their score until the admin closes the rating.</small></span>
           </label>
         </div>
         <div class="dialog-actions">
