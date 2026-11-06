@@ -585,3 +585,46 @@ body.signed-out .topbar { display: none; }
   .stats-card { padding: 16px; }
   .bars { max-width: none; }
 }
+
+/* ============================================================
+   Score input: 1,0 – 5,0 with one decimal
+   ============================================================ */
+.score-input { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 240px; max-width: 360px; }
+.score-mid { flex: 1; display: grid; gap: 6px; min-width: 0; }
+.score-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.score-val { font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; min-width: 2.2ch; }
+.score-input.unset .score-val { color: var(--muted); }
+.stars {
+  --v: 0; font-size: 1.05rem; letter-spacing: 2px; line-height: 1;
+  background: linear-gradient(90deg, var(--star) calc(var(--v) / 5 * 100%), var(--star-empty) 0);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.step {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface); cursor: pointer;
+  font-size: 1.3rem; font-weight: 600; line-height: 1; color: var(--text);
+  transition: background-color .15s, transform .12s var(--ease);
+}
+.step:hover { background: var(--surface-2); }
+.step:active { transform: scale(.9); }
+.score-input input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 8px; min-height: 0; padding: 0;
+  border: 0; border-radius: 99px; cursor: pointer;
+  background: linear-gradient(90deg, var(--accent) var(--p, 50%), var(--surface-2) var(--p, 50%));
+}
+.score-input.unset input[type="range"] { background: var(--surface-2); }
+.score-input input[type="range"]:focus { box-shadow: none; }
+.score-input input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--accent); box-shadow: var(--shadow);
+}
+.score-input input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent);
+}
+.score-input.unset input[type="range"]::-webkit-slider-thumb { border-color: var(--muted); }
+.rate-row { align-items: center; }
+@media (max-width: 600px) {
+  .rate-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .score-input { max-width: none; min-width: 0; }
+  .step { width: 44px; height: 44px; }
+}

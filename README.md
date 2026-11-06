@@ -1,7 +1,7 @@
 # 📚 Holtebois Book Club
 
 An app for our book club: keep track of the books we've read and give each one
-a score from 1 to 5 for **Language** and **Content**. Every member gives their
+a score from 1,0 to 5,0 (with one decimal, like 4,2) for **Language** and **Content**. Every member gives their
 own score, and the app shows the club's average.
 
 - Add books by **searching the internet**, Danish books included (Apple Books' Danish store, Open Library and Google Books), or by typing them in
@@ -24,6 +24,7 @@ It's plain HTML, CSS and JavaScript with nothing to install or build.
 | `config.js` | **Your settings**: club name and database keys |
 | `supabase/schema.sql` | Creates the database tables |
 | `supabase/002_rating_rounds_and_admin.sql` | Adds rating rounds and the club admin |
+| `supabase/003_decimal_scores.sql` | Allows scores with one decimal (4,2) |
 | `manifest.webmanifest`, `icon.svg` | Let the app be installed on a phone |
 
 ## 1. Try it on your computer
@@ -41,7 +42,7 @@ Then open http://localhost:8000.
 1. Create a free account at https://supabase.com and make a **New project**.
 2. In the project, open **SQL Editor → New query**, paste everything from
    `supabase/schema.sql`, and press **Run**. Then do the same with
-   `supabase/002_rating_rounds_and_admin.sql`.
+   `supabase/002_rating_rounds_and_admin.sql` and `supabase/003_decimal_scores.sql`.
 3. Open **Project Settings → API** and copy the **Project URL** and the **anon public** key.
 4. Paste them into `config.js`:
 

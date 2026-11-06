@@ -19,8 +19,8 @@ create table if not exists ratings (
   book_id    uuid not null references books(id) on delete cascade,
   user_id    uuid not null default auth.uid() references auth.users on delete cascade,
   member     text not null,  -- name shown in the app
-  language   smallint not null check (language between 1 and 5),
-  content    smallint not null check (content between 1 and 5),
+  language   numeric(2,1) not null check (language between 1 and 5),  -- e.g. 4.2
+  content    numeric(2,1) not null check (content between 1 and 5),
   comment    text,
   created_at timestamptz not null default now(),
   unique (book_id, user_id)  -- one score per member per book

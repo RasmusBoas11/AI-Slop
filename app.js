@@ -10,7 +10,9 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
   const avg = (nums) => (nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null);
-  const fmt = (n) => (n == null ? '–' : n.toFixed(1));
+  // Scores are shown with one decimal and a decimal comma, e.g. 4,2
+  const fmt = (n) => (n == null || isNaN(n) ? '–' : Number(n).toFixed(1).replace('.', ','));
+  const round1 = (n) => Math.round(Number(n) * 10) / 10;
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   // A stable colour (0–359) per title or name, for covers and avatars
   const hue = (s) => { let h = 7; for (const c of String(s || '')) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
@@ -159,7 +161,11 @@
 
   async function refresh() {
     try {
-      state.books = await store.listBooks();
+      // Decimal scores can arrive from the database as text ("4.2"); make them numbers
+      state.books = (await store.listBooks()).map((b) => ({
+        ...b,
+        ratings: (b.ratings || []).map((r) => ({ ...r, language: Number(r.language), content: Number(r.content) })),
+      }));
       render();
       if (state.openBookId && $('#bookDialog').open) renderBook();
     } catch (e) {
@@ -371,10 +377,31 @@
   }
 
   // ---------- Rendering: book detail ----------
+  // A score from 1,0 to 5,0 in steps of 0,1: drag the slider, or tap − / + to fine-tune.
   function pickerHtml(name, value) {
-    return `<div class="picker" data-name="${name}" data-value="${value || 0}" role="radiogroup" aria-label="${name} score">
-      ${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="${n === value}" aria-label="${n} of 5" data-v="${n}" class="${n <= (value || 0) ? 'on' : ''}">★</button>`).join('')}
+    const v = value ? round1(value) : null;
+    return `<div class="score-input${v ? '' : ' unset'}" data-name="${name}" data-value="${v || 0}">
+      <button type="button" class="step" data-step="-0.1" aria-label="Lower ${name} score">−</button>
+      <div class="score-mid">
+        <div class="score-top">
+          <output class="score-val">${v ? fmt(v) : '–'}</output>
+          <span class="stars" style="--v:${v || 0}" aria-hidden="true">★★★★★</span>
+        </div>
+        <input type="range" min="1" max="5" step="0.1" value="${v || 3}" style="--p:${((v || 3) - 1) / 4 * 100}%" aria-label="${name} score from 1 to 5">
+      </div>
+      <button type="button" class="step" data-step="0.1" aria-label="Raise ${name} score">+</button>
     </div>`;
+  }
+
+  function setScore(box, value) {
+    const v = Math.min(5, Math.max(1, round1(value)));
+    box.dataset.value = v;
+    box.classList.remove('unset');
+    $('.score-val', box).textContent = fmt(v);
+    $('.stars', box).style.setProperty('--v', v);
+    const range = $('input[type="range"]', box);
+    range.value = v;
+    range.style.setProperty('--p', `${(v - 1) / 4 * 100}%`);
   }
 
   function roundPanel(b, s, mine) {
@@ -409,7 +436,7 @@
     return `<div class="panel round closed">
       <div class="round-head"><span class="badge closed">🔒 Rating closed</span>
         <span class="muted small">${b.rating_closed_at ? 'on ' + esc(fmtDate(b.rating_closed_at)) : ''}</span>${adminBtn}</div>
-      <p class="muted">${s.count ? `Final score from ${plural(s.count, 'member', 'members')}.` : 'Nobody scored this book before rating closed.'}${mine ? ` You gave Language ${mine.language} and Content ${mine.content}.` : ''}</p>
+      <p class="muted">${s.count ? `Final score from ${plural(s.count, 'member', 'members')}.` : 'Nobody scored this book before rating closed.'}${mine ? ` You gave Language ${fmt(mine.language)} and Content ${fmt(mine.content)}.` : ''}</p>
     </div>`;
   }
 
@@ -454,7 +481,7 @@
             ${avatarHtml(r.member)}
             <div class="bubble">
               <div class="who">${esc(r.member)}${isMine(r) ? ' (you)' : ''}
-                <span>Language ${esc(r.language)} · Content ${esc(r.content)}</span></div>
+                <span>Language ${fmt(r.language)} · Content ${fmt(r.content)}</span></div>
               ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
             </div>
           </li>`).join('')}</ul>` : '<p class="muted">Nobody has scored this book yet.</p>'}
@@ -825,21 +852,18 @@
     document.querySelectorAll('#authView [data-auth-mode]').forEach((b) =>
       b.addEventListener('click', () => setAuthMode(b.dataset.authMode)));
 
-    // Book detail: star pickers, save score, rating round, edit/delete
+    // Book detail: score sliders, save score, rating round, edit/delete
     const body = $('#bookBody');
+    body.addEventListener('input', (e) => {
+      const range = e.target.closest('.score-input input[type="range"]');
+      if (range) setScore(range.closest('.score-input'), range.value);
+    });
     body.addEventListener('click', async (e) => {
-      const star = e.target.closest('.picker button');
-      if (star) {
-        const picker = star.parentElement;
-        const v = Number(star.dataset.v);
-        picker.dataset.value = v;
-        picker.querySelectorAll('button').forEach((btn) => {
-          btn.classList.toggle('on', Number(btn.dataset.v) <= v);
-          btn.setAttribute('aria-checked', String(Number(btn.dataset.v) === v));
-          btn.classList.remove('pop');
-        });
-        void star.offsetWidth; // restart the little "pop" animation
-        star.classList.add('pop');
+      const step = e.target.closest('.score-input .step');
+      if (step) {
+        const box = step.closest('.score-input');
+        const current = Number(box.dataset.value) || 3;
+        setScore(box, current + Number(step.dataset.step));
         return;
       }
       const action = e.target.closest('[data-action]')?.dataset.action;
@@ -868,9 +892,9 @@
     body.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!state.member) { askName(); return; }
-      const language = Number($('.picker[data-name="language"]', body).dataset.value);
-      const content = Number($('.picker[data-name="content"]', body).dataset.value);
-      if (!language || !content) { toast('Pick 1–5 stars for both Language and Content', true); return; }
+      const language = round1($('.score-input[data-name="language"]', body).dataset.value);
+      const content = round1($('.score-input[data-name="content"]', body).dataset.value);
+      if (!language || !content) { toast('Set a score from 1,0 to 5,0 for both Language and Content', true); return; }
       const btn = e.target.querySelector('[type="submit"]');
       btn.disabled = true;
       try {
