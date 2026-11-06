@@ -9,7 +9,9 @@ own score, and the app shows the club's average.
 - A **Statistics** page with the top rated books, best language, best content, most divided opinions and most active readers
 - Add a **picture** of the book: the cover from the search, or a photo from your phone
 - Sort by best language, best content, best overall or when you read it
-- Members **create their own login** (email + password), and each person can only change their own scores
+- Members **create their own login** (email + password) with a **profile picture**, and each person can only change their own scores
+- Each book can show **who selected it** and **where the club reviewed it**
+- Members score with one decimal (4,2); averages and final scores show up to three decimals (4,683)
 - Works in any browser, and on iPhone it can be **added to the home screen** like a normal app
 
 It's plain HTML, CSS and JavaScript with nothing to install or build.
@@ -26,6 +28,7 @@ It's plain HTML, CSS and JavaScript with nothing to install or build.
 | `supabase/002_rating_rounds_and_admin.sql` | Adds rating rounds and the club admin |
 | `supabase/003_decimal_scores.sql` | Allows scores with one decimal (4,2) |
 | `supabase/004_import_old_ratings.sql` | Lets the admin import old ratings for members without an account (includes 003) |
+| `supabase/005_selected_by_location_profiles.sql` | Adds "Selected by", review location and profile pictures |
 | `manifest.webmanifest`, `icon.svg` | Let the app be installed on a phone |
 
 ## 1. Try it on your computer
@@ -43,7 +46,8 @@ Then open http://localhost:8000.
 1. Create a free account at https://supabase.com and make a **New project**.
 2. In the project, open **SQL Editor → New query**, paste everything from
    `supabase/schema.sql`, and press **Run**. Then do the same with
-   `supabase/002_rating_rounds_and_admin.sql` and `supabase/004_import_old_ratings.sql`.
+   `supabase/002_rating_rounds_and_admin.sql`, `supabase/004_import_old_ratings.sql` and
+   `supabase/005_selected_by_location_profiles.sql`.
 3. Open **Project Settings → API** and copy the **Project URL** and the **anon public** key.
 4. Paste them into `config.js`:
 

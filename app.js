@@ -13,11 +13,22 @@
   // Scores are shown with one decimal and a decimal comma, e.g. 4,2
   const fmt = (n) => (n == null || isNaN(n) ? '–' : Number(n).toFixed(1).replace('.', ','));
   const round1 = (n) => Math.round(Number(n) * 10) / 10;
+  // Averages and totals: up to three decimals, e.g. 4,633 (4,7 stays 4,7)
+  const fmtAvg = (n) => {
+    if (n == null || isNaN(n)) return '–';
+    return (Math.round(Number(n) * 1000) / 1000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '.0').replace('.', ',');
+  };
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   // A stable colour (0–359) per title or name, for covers and avatars
   const hue = (s) => { let h = 7; for (const c of String(s || '')) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
   const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-  const avatarHtml = (name) => `<span class="avatar" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+  // A member's picture if they uploaded one, otherwise their coloured initials
+  const avatarHtml = (name, userId, cls = '') => {
+    const pic = avatarFor(name, userId);
+    return pic
+      ? `<span class="avatar has-pic ${cls}" aria-hidden="true"><img src="${esc(pic)}" alt=""></span>`
+      : `<span class="avatar ${cls}" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+  };
   const fmtDate = (d) => {
     if (!d) return '';
     const date = new Date(d.length === 10 ? d + 'T00:00:00' : d);
@@ -132,6 +143,17 @@
         save(d);
       },
       async claimRatings() { return 0; },
+      async listProfiles() { return load().profiles || []; },
+      async saveProfile(p) {
+        const d = load();
+        d.profiles = d.profiles || [];
+        const key = String(p.oldName || p.name).trim().toLowerCase();
+        const i = d.profiles.findIndex((x) => x.name.trim().toLowerCase() === key);
+        const prev = i >= 0 ? d.profiles[i] : {};
+        const row = { name: p.name, avatar: 'avatar' in p ? p.avatar : prev.avatar || null };
+        if (i >= 0) d.profiles[i] = row; else d.profiles.push(row);
+        save(d);
+      },
       async isAdmin() { return true; }, // on one device, you are the admin
     };
   }
@@ -140,10 +162,24 @@
     const check = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
     return {
       async listBooks() { return check(await sb.from('books').select('*, ratings(*)')); },
-      async addBook(book) { return check(await sb.from('books').insert(book).select().single()); },
+      async addBook(book) {
+        let res = await sb.from('books').insert(book).select().single();
+        if (res.error && /selected_by|review_location/.test(res.error.message)) {
+          toast('Saved without "Selected by" and location: run update 005 in Supabase to save those.', true);
+          const { selected_by, review_location, ...rest } = book;
+          res = await sb.from('books').insert(rest).select().single();
+        }
+        return check(res);
+      },
       async updateBook(id, patch) {
         // Ask for the changed row back: if the database silently refused, nothing comes back
-        const rows = check(await sb.from('books').update(patch).eq('id', id).select('id, rating_open'));
+        let res = await sb.from('books').update(patch).eq('id', id).select('id, rating_open');
+        if (res.error && /selected_by|review_location/.test(res.error.message)) {
+          toast('Saved without "Selected by" and location: run update 005 in Supabase to save those.', true);
+          const { selected_by, review_location, ...rest } = patch;
+          res = await sb.from('books').update(rest).eq('id', id).select('id, rating_open');
+        }
+        const rows = check(res);
         if (!rows || !rows.length) throw new Error("the database didn't allow this change. Try signing out and in again.");
         if ('rating_open' in patch && rows[0].rating_open !== patch.rating_open) {
           throw new Error('the database kept the old rating status. Has update 002 been run in Supabase?');
@@ -156,6 +192,16 @@
       async claimRatings() {
         const { data, error } = await sb.rpc('claim_my_ratings');
         return error ? 0 : Number(data) || 0;
+      },
+      async listProfiles() {
+        const { data, error } = await sb.from('profiles').select('user_id, name, avatar');
+        return error ? [] : data; // before update 005 there is no profiles table yet
+      },
+      async saveProfile(p) {
+        const row = { user_id: state.user.id, name: p.name, updated_at: new Date().toISOString() };
+        if ('avatar' in p) row.avatar = p.avatar;
+        const { error } = await sb.from('profiles').upsert(row, { onConflict: 'user_id' });
+        if (error) throw new Error(/profiles/.test(error.message) ? 'run update 005 in Supabase first.' : error.message);
       },
       async isAdmin(userId) {
         const { data, error } = await sb.from('club_admins').select('user_id').eq('user_id', userId);
@@ -170,6 +216,7 @@
   const state = {
     books: [],
     user: null,       // the signed-in Supabase user (shared mode only)
+    profiles: { byId: {}, byName: {}, list: [] },
     isAdmin: false,
     member: SHARED ? '' : readLocal('bookclub-member', ''),
     view: 'books',    // 'books' | 'stats'
@@ -197,6 +244,13 @@
   async function refresh() {
     try {
       // Decimal scores can arrive from the database as text ("4.2"); make them numbers
+      const profiles = await store.listProfiles();
+      state.profiles = { byId: {}, byName: {}, list: profiles };
+      profiles.forEach((p) => {
+        if (p.user_id) state.profiles.byId[p.user_id] = p;
+        if (p.name) state.profiles.byName[p.name.trim().toLowerCase()] = p;
+      });
+      renderMember();
       state.books = (await store.listBooks()).map((b) => ({
         ...b,
         ratings: (b.ratings || []).map((r) => ({ ...r, language: Number(r.language), content: Number(r.content) })),
@@ -206,6 +260,11 @@
     } catch (e) {
       toast('Could not load books: ' + e.message, true);
     }
+  }
+
+  function avatarFor(name, userId) {
+    const p = (userId && state.profiles.byId[userId]) || state.profiles.byName[String(name || '').trim().toLowerCase()];
+    return p ? p.avatar : null;
   }
 
   // One key per person: their account, or their name for imported scores without an account
@@ -311,10 +370,10 @@
       const s = scoresOf(b);
       const scores = !s.count ? `<p class="unrated">Not scored yet</p>`
         : statusOf(b) === 'closed'
-        ? `<div class="final-pill" title="Final score: average of everyone's Language and Content"><span class="star">★</span>${fmt(s.overall)}<small>Final score</small></div>`
+        ? `<div class="final-pill" title="Final score: average of everyone's Language and Content"><span class="star">★</span>${fmtAvg(s.overall)}<small>Final score</small></div>`
         : `<div class="pills">
-             <span class="pill" title="Language"><span class="lbl">Lang</span><span class="star">★</span>${fmt(s.language)}</span>
-             <span class="pill" title="Content"><span class="lbl">Content</span><span class="star">★</span>${fmt(s.content)}</span>
+             <span class="pill" title="Language"><span class="lbl">Lang</span><span class="star">★</span>${fmtAvg(s.language)}</span>
+             <span class="pill" title="Content"><span class="lbl">Content</span><span class="star">★</span>${fmtAvg(s.content)}</span>
            </div>`;
       return `<button class="card" type="button" data-id="${esc(b.id)}" style="--i:${Math.min(i, 12)}">
           <span class="cover-wrap">${coverHtml(b)}${statusBadge(b)}</span>
@@ -355,11 +414,11 @@
           <strong>${esc(x.b.title)}</strong>
           <small>${esc(x.b.author || '')}${statusOf(x.b) === 'open' ? ' · <em>still open</em>' : ''}</small>
           ${key === 'overall' ? `<span class="bars">
-            <span class="bar"><span class="bar-lbl">Language</span><span class="track"><i style="--v:${x.s.language}"></i></span><b>${fmt(x.s.language)}</b></span>
-            <span class="bar"><span class="bar-lbl">Content</span><span class="track"><i style="--v:${x.s.content}" class="alt"></i></span><b>${fmt(x.s.content)}</b></span>
+            <span class="bar"><span class="bar-lbl">Language</span><span class="track"><i style="--v:${x.s.language}"></i></span><b>${fmtAvg(x.s.language)}</b></span>
+            <span class="bar"><span class="bar-lbl">Content</span><span class="track"><i style="--v:${x.s.content}" class="alt"></i></span><b>${fmtAvg(x.s.content)}</b></span>
           </span>` : ''}
         </span>
-        <span class="rank-score">${fmt(x.s[key])}<small>${plural(x.s.count, 'score', 'scores')}</small></span>
+        <span class="rank-score">${fmtAvg(x.s[key])}<small>${plural(x.s.count, 'score', 'scores')}</small></span>
       </button></li>`;
 
     // Most divided: biggest gap between the highest and lowest member score
@@ -369,16 +428,27 @@
     }).filter((x) => x.spread > 0).sort((a, b) => b.spread - a.spread).slice(0, 3);
 
     const readers = [...members.entries()].map(([key, name]) => ({
-      name, n: allRatings.filter((r) => memberKey(r) === key).length,
+      name, uid: key.startsWith('name:') ? null : key, n: allRatings.filter((r) => memberKey(r) === key).length,
     })).sort((a, b) => b.n - a.n).slice(0, 5);
     const maxN = readers[0] ? readers[0].n : 1;
+
+    // Best book pickers: average score of the books each member selected
+    const pickMap = new Map();
+    rated.filter((x) => x.b.selected_by).forEach((x) => {
+      const k = x.b.selected_by.trim().toLowerCase();
+      const e = pickMap.get(k) || { name: x.b.selected_by.trim(), scores: [] };
+      e.scores.push(x.s.overall);
+      pickMap.set(k, e);
+    });
+    const pickers = [...pickMap.values()].map((e) => ({ ...e, avg: avg(e.scores) }))
+      .sort((a, b) => b.avg - a.avg || b.scores.length - a.scores.length).slice(0, 5);
 
     el.innerHTML = `
       <div class="overview">
         <div class="stat"><div class="k">Books read</div><div class="v">${state.books.length}</div></div>
         <div class="stat"><div class="k">Scores given</div><div class="v">${allRatings.length}</div></div>
         <div class="stat"><div class="k">Members scoring</div><div class="v">${members.size}</div></div>
-        <div class="stat accent"><div class="k">Club average</div><div class="v">${fmt(clubAvg)} <small>/ 5</small></div></div>
+        <div class="stat accent"><div class="k">Club average</div><div class="v">${fmtAvg(clubAvg)} <small>/ 5</small></div></div>
       </div>
 
       <section class="stats-card">
@@ -403,13 +473,20 @@
             <li><button type="button" class="rank-row" data-id="${esc(x.b.id)}" style="--i:${i}">
               <span class="rank">${i + 1}</span>${coverHtml(x.b, 'mini')}
               <span class="rank-info"><strong>${esc(x.b.title)}</strong><small>${esc(x.b.author || '')}</small></span>
-              <span class="rank-score">${fmt(x.spread)}<small>point gap</small></span>
+              <span class="rank-score">${fmtAvg(x.spread)}<small>point gap</small></span>
             </button></li>`).join('')}</ol>
+        </section>` : ''}
+        ${pickers.length ? `<section class="stats-card">
+          <h2>🎯 Best book pickers</h2>
+          <p class="muted">Average score of the books each member selected.</p>
+          <ul class="reader-list">${pickers.map((r) => `
+            <li>${avatarHtml(r.name)}<span class="reader-name">${esc(r.name)}<small> · ${plural(r.scores.length, 'book', 'books')}</small></span>
+              <span class="track"><i style="--v:${r.avg}"></i></span><b>${fmtAvg(r.avg)}</b></li>`).join('')}</ul>
         </section>` : ''}
         <section class="stats-card">
           <h2>📚 Most active readers</h2>
           <ul class="reader-list">${readers.map((r) => `
-            <li>${avatarHtml(r.name)}<span class="reader-name">${esc(r.name)}</span>
+            <li>${avatarHtml(r.name, r.uid)}<span class="reader-name">${esc(r.name)}</span>
               <span class="track"><i style="--v:${(r.n / maxN) * 5}"></i></span><b>${r.n}</b></li>`).join('')}</ul>
         </section>
       </div>`;
@@ -489,9 +566,10 @@
     // Highest overall first; ties by name
     const rows = (b.ratings || []).slice().sort((x, y) => memberOverall(y) - memberOverall(x) || x.member.localeCompare(y.member));
     const comments = rows.filter((r) => r.comment);
-    const tags = [b.year ? `Published ${b.year}` : '', b.read_on ? `Read ${fmtMonth(b.read_on)}` : '', b.added_by ? `Added by ${b.added_by}` : '']
+    const tags = [b.selected_by ? `🎯 Selected by ${b.selected_by}` : '', b.review_location ? `📍 ${b.review_location}` : '',
+      b.read_on ? `Read ${fmtMonth(b.read_on)}` : '', b.year ? `Published ${b.year}` : '', b.added_by ? `Added by ${b.added_by}` : '']
       .filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
-    const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmt(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
+    const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmtAvg(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
 
     $('#bookBody').innerHTML = `
       <div class="detail-hero" style="--h:${hue(b.title)}">
@@ -513,12 +591,12 @@
       <div class="final-card">
         <div class="final-main">
           <div class="label">Final score</div>
-          <div class="final-num">${fmt(s.overall)}</div>
+          <div class="final-num">${fmtAvg(s.overall)}</div>
           <span class="stars" style="--v:${s.overall}" aria-hidden="true">★★★★★</span>
         </div>
         <div class="final-parts">
-          <div><span>Language</span><b>${fmt(s.language)}</b></div>
-          <div><span>Content</span><b>${fmt(s.content)}</b></div>
+          <div><span>Language</span><b>${fmtAvg(s.language)}</b></div>
+          <div><span>Content</span><b>${fmtAvg(s.content)}</b></div>
           <div><span>Members</span><b>${s.count}</b></div>
         </div>
       </div>` : `
@@ -542,23 +620,23 @@
           </div>
           ${rows.map((r) => `
           <div class="st-row${isMine(r) ? ' me' : ''}" role="row">
-            <span class="st-member" role="cell">${avatarHtml(r.member)}<span>${esc(r.member)}${isMine(r) ? ' <em>(you)</em>' : ''}</span></span>
+            <span class="st-member" role="cell">${avatarHtml(r.member, r.user_id)}<span>${esc(r.member)}${isMine(r) ? ' <em>(you)</em>' : ''}</span></span>
             <span role="cell">${fmt(r.language)}</span>
             <span role="cell">${fmt(r.content)}</span>
-            <span role="cell" class="st-overall">${fmt(memberOverall(r))}</span>
+            <span role="cell" class="st-overall">${fmtAvg(memberOverall(r))}</span>
           </div>`).join('')}
           <div class="st-row st-foot" role="row">
             <span role="cell">${closed ? 'Final score' : 'Average'}</span>
-            <span role="cell">${fmt(s.language)}</span>
-            <span role="cell">${fmt(s.content)}</span>
-            <span role="cell" class="st-overall">${fmt(s.overall)}</span>
+            <span role="cell">${fmtAvg(s.language)}</span>
+            <span role="cell">${fmtAvg(s.content)}</span>
+            <span role="cell" class="st-overall">${fmtAvg(s.overall)}</span>
           </div>
         </div>
         <p class="muted small">Overall (total) = the average of Language and Content.</p>
         ${comments.length ? `<h4 class="comments-title">Comments</h4>
         <ul class="rating-list">${comments.map((r) => `
           <li>
-            ${avatarHtml(r.member)}
+            ${avatarHtml(r.member, r.user_id)}
             <div class="bubble">
               <div class="who">${esc(r.member)}${isMine(r) ? ' (you)' : ''}</div>
               <p>${esc(r.comment)}</p>
@@ -590,6 +668,33 @@
     $('#coverRemove').hidden = !src;
   }
 
+  // Everyone the club knows: people who have scored, picked books, or are signed in now
+  function knownMembers() {
+    const names = new Map();
+    const add = (n) => { const t = String(n || '').trim(); if (t && !names.has(t.toLowerCase())) names.set(t.toLowerCase(), t); };
+    add(state.member);
+    state.profiles.list.forEach((p) => add(p.name));
+    state.books.forEach((b) => { add(b.selected_by); (b.ratings || []).forEach((r) => add(r.member)); });
+    return [...names.values()].sort((a, b) => a.localeCompare(b, 'en'));
+  }
+
+  function fillMemberSelect(current) {
+    const members = knownMembers();
+    const cur = String(current || '').trim();
+    if (cur && !members.some((m) => m.toLowerCase() === cur.toLowerCase())) members.push(cur);
+    $('#fSelectedBy').innerHTML = '<option value="">Not set</option>'
+      + members.map((m) => `<option value="${esc(m)}"${m.toLowerCase() === cur.toLowerCase() ? ' selected' : ''}>${esc(m)}</option>`).join('')
+      + '<option value="__other">Someone else…</option>';
+    $('#fSelectedByOther').hidden = true;
+    $('#fSelectedByOther').value = '';
+  }
+
+  function selectedByValue() {
+    const v = $('#fSelectedBy').value;
+    if (v === '__other') return $('#fSelectedByOther').value.trim() || null;
+    return v || null;
+  }
+
   function openEdit(book) {
     state.editingId = book ? book.id : null;
     $('#editTitle').textContent = book ? 'Edit book' : 'Add a book';
@@ -603,6 +708,10 @@
     $('#fYear').value = book?.year || '';
     $('#fReadOn').value = book?.read_on || '';
     $('#fDescription').value = book?.description || '';
+    $('#fLocation').value = book?.review_location || '';
+    fillMemberSelect(book ? book.selected_by : '');
+    $('#locationList').innerHTML = [...new Set(state.books.map((x) => x.review_location).filter(Boolean))]
+      .sort().map((l) => `<option value="${esc(l)}"></option>`).join('');
     setCover(book?.cover || '');
     $('#editDialog').showModal();
     (book ? $('#fTitle') : $('#searchInput')).focus();
@@ -750,6 +859,7 @@
       $('#signOutBtn').hidden = false;
     }
     $('#importOpenBtn').hidden = !state.isAdmin || !state.member;
+    renderProfilePic();
     $('#nameDialog').showModal();
   }
 
@@ -769,6 +879,10 @@
       const line = raw.trim().replace(/:\s*$/, '').trim();
       if (!line) continue;
       if (/^(samlet|total|i alt|gennemsnit|average|overall)\b/i.test(line)) continue;
+      const picked = line.match(/^(valgt af|udvalgt af|selected by|picked by)\s*[:=]\s*(.+)$/i);
+      if (picked && book) { book.selected_by = picked[2].trim(); continue; }
+      const place = line.match(/^(sted|lokation|location|review location|anmeldt (?:på|hos))\s*[:=]\s*(.+)$/i);
+      if (place && book) { book.review_location = place[2].trim(); continue; }
       const score = line.match(/^(indhold|content|skriveri|sprog|language|skrivning)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*$/i);
       if (score) {
         if (!member) continue;
@@ -809,12 +923,13 @@
       const existing = findBook(b.title);
       return `<div class="import-book">
         <div class="import-head"><strong>${esc(b.title)}</strong>${b.author ? `<span class="muted"> by ${esc(b.author)}</span>` : ''}
+          ${b.selected_by ? `<span class="tag">🎯 ${esc(b.selected_by)}</span>` : ''}${b.review_location ? `<span class="tag">📍 ${esc(b.review_location)}</span>` : ''}
           ${existing ? '<span class="badge waiting">Already on the shelf: scores are added to it</span>' : ''}</div>
         <div class="score-table">
           <div class="st-row st-head"><span>Member</span><span>Lang</span><span>Cont</span><span>Total</span></div>
           ${b.ratings.map((r) => `<div class="st-row"><span class="st-member">${avatarHtml(r.member)}<span>${esc(r.member)}</span></span>
-            <span>${fmt(r.language)}</span><span>${fmt(r.content)}</span><span class="st-overall">${fmt((r.language + r.content) / 2)}</span></div>`).join('')}
-          <div class="st-row st-foot"><span>Final score</span><span>${fmt(lang)}</span><span>${fmt(cont)}</span><span class="st-overall">${fmt((lang + cont) / 2)}</span></div>
+            <span>${fmt(r.language)}</span><span>${fmt(r.content)}</span><span class="st-overall">${fmtAvg((r.language + r.content) / 2)}</span></div>`).join('')}
+          <div class="st-row st-foot"><span>Final score</span><span>${fmtAvg(lang)}</span><span>${fmtAvg(cont)}</span><span class="st-overall">${fmtAvg((lang + cont) / 2)}</span></div>
         </div>
       </div>`;
     }).join('')) + (problems.length ? `<div class="import-problems"><strong>Skipped:</strong><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : '');
@@ -842,6 +957,7 @@
           } catch { /* no cover is fine */ }
           book = await store.addBook({
             title: b.title, author: b.author || null, ...extra, added_by: state.member || null,
+            ...(b.selected_by ? { selected_by: b.selected_by } : {}), ...(b.review_location ? { review_location: b.review_location } : {}),
             rating_open: false, rating_closed_at: new Date().toISOString(),
           });
         }
@@ -863,9 +979,42 @@
     }
   }
 
+  function renderProfilePic() {
+    $('#profileRow').hidden = !state.member;
+    $('#profilePic').outerHTML = avatarHtml(state.member, state.user && state.user.id, 'xl').replace('<span class="avatar', '<span id="profilePic" class="avatar');
+    $('#profileRemove').hidden = !avatarFor(state.member, state.user && state.user.id);
+  }
+
+  // Square-crop and shrink a photo for a profile picture
+  function squareImage(file, size = 256) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file is not a picture this browser can read.')); };
+      img.src = url;
+    });
+  }
+
+  async function setProfilePicture(avatar) {
+    try {
+      await store.saveProfile({ name: state.member, avatar });
+      toast(avatar ? 'Profile picture saved' : 'Profile picture removed');
+      await refresh();
+      renderProfilePic();
+    } catch (err) { toast('Could not save picture: ' + err.message, true); }
+  }
+
   function renderMember() {
     $('#memberBtn').innerHTML = state.member
-      ? `${avatarHtml(state.member)}<span class="chip-name">${esc(state.member)}</span>`
+      ? `${avatarHtml(state.member, state.user && state.user.id)}<span class="chip-name">${esc(state.member)}</span>`
       : '<span class="chip-name" style="padding-left:7px">Set name</span>';
   }
 
@@ -944,6 +1093,7 @@
       lastUserId = state.user.id;
       state.isAdmin = await store.isAdmin(state.user.id);
       const linked = await store.claimRatings();
+      try { await store.saveProfile({ name: state.member }); } catch { /* fine before update 005 */ }
       if (linked) toast(`Welcome! ${plural(linked, 'earlier score was', 'earlier scores were')} linked to your account.`);
       refresh();
     }
@@ -1030,6 +1180,7 @@
       } else {
         writeLocal('bookclub-member', name);
       }
+      try { await store.saveProfile({ name, oldName: state.member }); } catch { /* fine before update 005 */ }
       state.member = name;
       renderMember();
       toast('Name saved');
@@ -1039,6 +1190,16 @@
       $('#nameDialog').close();
       await sb.auth.signOut();
     });
+
+    // Profile picture
+    $('#profileFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try { await setProfilePicture(await squareImage(file)); }
+      catch (err) { toast(err.message, true); }
+    });
+    $('#profileRemove').addEventListener('click', () => setProfilePicture(null));
 
     // Import old ratings (admin)
     $('#importOpenBtn').addEventListener('click', () => {
@@ -1129,6 +1290,11 @@
       try { renderResults(await searchOnline(q)); }
       catch (err) { $('#searchResults').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
     });
+    $('#fSelectedBy').addEventListener('change', (e) => {
+      const other = e.target.value === '__other';
+      $('#fSelectedByOther').hidden = !other;
+      if (other) $('#fSelectedByOther').focus();
+    });
     $('#searchResults').addEventListener('click', (e) => {
       const el = e.target.closest('[data-result]');
       if (!el) return;
@@ -1165,6 +1331,8 @@
         read_on: $('#fReadOn').value || null,
         description: $('#fDescription').value.trim() || null,
         cover: state.edit.cover || null,
+        selected_by: selectedByValue(),
+        review_location: $('#fLocation').value.trim() || null,
       };
       const btn = $('#saveBook');
       btn.disabled = true;

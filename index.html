@@ -134,6 +134,15 @@
       <h2 id="nameTitle">Who's reading?</h2>
       <p id="nameLead" class="muted">Your name is shown next to the scores you give. It's saved on this device.</p>
       <p id="accountEmail" class="muted account-email" hidden></p>
+      <div id="profileRow" class="profile-row" hidden>
+        <span id="profilePic" class="avatar xl"></span>
+        <div class="profile-actions">
+          <label class="btn small">📷 Upload picture
+            <input id="profileFile" type="file" accept="image/*" hidden>
+          </label>
+          <button id="profileRemove" class="btn small ghost danger" type="button" hidden>Remove</button>
+        </div>
+      </div>
       <label>Your name
         <input id="nameInput" required maxlength="40" autocomplete="given-name">
       </label>
@@ -165,7 +174,7 @@
         <h2>Import old ratings</h2>
         <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
       </div>
-      <p class="muted">Paste books the club rated before the app. Start each book with <b>Author - Title</b>, then each member's name with <b>Indhold</b> (Content) and <b>Skriveri</b> (Language). Totals are worked out by the app, so those lines are skipped. You can paste several books at once.</p>
+      <p class="muted">Paste books the club rated before the app. Start each book with <b>Author - Title</b> (optionally <b>Valgt af:</b> and <b>Sted:</b> lines), then each member's name with <b>Indhold</b> (Content) and <b>Skriveri</b> (Language). Totals are worked out by the app, so those lines are skipped. You can paste several books at once.</p>
       <textarea id="importText" rows="9" spellcheck="false" placeholder="Khaled Hosseini - Drageløberen:&#10;&#10;Jasp:&#10;Indhold: 4.3&#10;Skriveri: 4.8&#10;&#10;Boas:&#10;Indhold: 4.7&#10;Skriveri: 4.7"></textarea>
       <div id="importPreview" class="import-preview"></div>
       <p class="muted small">Imported books are saved with rating closed. When a friend creates an account with the same name (for example "Jasp"), their scores are linked to them automatically.</p>
@@ -221,6 +230,16 @@
             </label>
             <label>We read it
               <input id="fReadOn" type="date">
+            </label>
+          </div>
+          <div class="two">
+            <label>Selected by
+              <select id="fSelectedBy" aria-label="Member who selected the book"></select>
+              <input id="fSelectedByOther" maxlength="40" placeholder="Name" hidden>
+            </label>
+            <label>Review location
+              <input id="fLocation" maxlength="120" placeholder="e.g. Café Paludan" list="locationList">
+              <datalist id="locationList"></datalist>
             </label>
           </div>
           <label>About the book
