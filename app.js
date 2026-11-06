@@ -794,6 +794,7 @@
     const jobs = isIsbn ? [
       getJson(`https://openlibrary.org/search.json?isbn=${isbn}&limit=5&fields=title,author_name,first_publish_year,cover_i,language`, signal).then((d) => ({ ol: d })),
       getJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=5${gKey}`, signal).then((d) => ({ gb: d })),
+      getJson(`https://itunes.apple.com/lookup?isbn=${isbn}&country=dk`, signal).then((d) => ({ apple: d })),
     ] : [
       apple(q, 'ebook').then((d) => ({ apple: d })),
       apple(q, 'audiobook').then((d) => ({ apple: d, audio: true })),
@@ -834,9 +835,12 @@
         (value.gb.items || []).forEach((it) => {
           const v = it.volumeInfo || {};
           const thumb = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || '';
+          const isbn13 = ((v.industryIdentifiers || []).find((x) => x.type === 'ISBN_13') || {}).identifier || '';
           all.push({ title: cleanTitle(v.subtitle ? `${v.title}: ${v.subtitle}` : v.title), author: (v.authors || []).slice(0, 2).join(', '),
-            year: v.publishedDate ? parseInt(v.publishedDate, 10) || null : null,
-            cover: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') + '&fife=w600' : '',
+            year: v.publishedDate ? parseInt(v.publishedDate, 10) || null : null, isbn: isbn13,
+            // No picture from Google? Try Open Library's cover for the ISBN (it hides itself if there is none)
+            cover: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') + '&fife=w600'
+              : (isbn13 ? `https://covers.openlibrary.org/b/isbn/${isbn13}-L.jpg?default=false` : ''),
             description: plainText(v.description), danish: v.language === 'da', foreign: !!v.language && !['da', 'en'].includes(v.language),
             source: 'Google Books' });
         });
@@ -844,15 +848,26 @@
     });
 
     // Every finished word must appear, and the half-typed word must start a word, in title or author
+    const hayOf = (r) => ' ' + norm(`${r.title} ${r.author}`) + ' ';
     const matches = (r) => {
       if (isIsbn) return true;
-      const hay = ' ' + norm(`${r.title} ${r.author}`) + ' ';
+      const hay = hayOf(r);
       return whole.every((w) => hay.includes(w)) && (!prefix || hay.includes(' ' + prefix));
+    };
+    // Few exact matches? Also show books matching some of the words (e.g. a title without its author)
+    const strictCount = all.filter((r) => r.title && matches(r)).length;
+    const nearMatch = (r) => {
+      if (strictCount >= 8 || matches(r)) return false;
+      const hay = hayOf(r);
+      const words = [...whole, ...(prefix ? [prefix] : [])].filter((w) => w.length > 2);
+      return words.filter((w) => hay.includes(' ' + w)).length >= Math.max(1, words.length - 1)
+        && norm(r.title).split(' ').some((t) => words.includes(t));
     };
 
     // Merge the same book from different sources: best cover, earliest year, any description
     const map = new Map();
-    all.filter((r) => r.title && matches(r)).forEach((r, i) => {
+    all.filter((r) => r.title && (matches(r) || nearMatch(r))).forEach((r, i) => {
+      if (!matches(r)) r.near = true;
       const key = norm(r.title.split(':')[0]).replace(/ /g, '') + '|' + norm((r.author.split(',')[0] || '').split(' ').pop());
       const prev = map.get(key);
       if (!prev) { map.set(key, { ...r, i }); return; }
@@ -861,12 +876,14 @@
       if (r.year && (!prev.year || r.year < prev.year)) prev.year = r.year;
       prev.danish = prev.danish || r.danish;
       prev.foreign = prev.foreign && r.foreign;
+      if (!prev.isbn && r.isbn) prev.isbn = r.isbn;
+      prev.near = prev.near && r.near;
     });
     // Letters Danish never uses mean a translation into another language
     map.forEach((r) => { if (/[łąęśźżćńțșăčđžšőűçãõñ]/i.test(r.title)) { r.danish = false; r.foreign = true; } });
     // Titles that start with what you typed first, then books with a cover, then Danish
     const qn = norm(q);
-    const score = (r) => (norm(r.title).startsWith(qn) ? 4 : 0) + (r.cover ? 2 : 0) + (r.danish ? 1.5 : 0) - (r.foreign ? 3 : 0);
+    const score = (r) => (norm(r.title).startsWith(qn) ? 4 : 0) + (r.cover ? 2 : 0) + (r.danish ? 1.5 : 0) - (r.foreign ? 3 : 0) - (r.near ? 5 : 0);
     // Drop author-less copies of a book that is already listed with its author
     const withAuthor = new Set([...map.values()].filter((r) => r.author).map((r) => norm(r.title).replace(/ /g, '')));
     const list = [...map.values()].filter((r) => r.author || !withAuthor.has(norm(r.title).replace(/ /g, '')));
@@ -885,7 +902,7 @@
     $('#searchResults').innerHTML = results.length
       ? results.map((r, i) => `<button class="result" type="button" role="option" data-result="${i}" style="--i:${Math.min(i, 10)}">
           ${coverHtml(r)}
-          <span class="result-text"><strong>${esc(r.title)}</strong><small>${esc([r.author, r.year].filter(Boolean).join(' · '))}</small></span>
+          <span class="result-text"><strong>${esc(r.title)}</strong><small>${esc([r.author || (r.isbn ? 'ISBN ' + r.isbn : 'Unknown author'), r.year].filter(Boolean).join(' · '))}</small></span>
           ${r.danish ? '<span class="flag" title="Danish">🇩🇰</span>' : ''}
         </button>`).join('')
       : '<p class="find-empty">No matches yet. Keep typing, try the author\'s name, or add it yourself below.</p>';
