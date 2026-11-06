@@ -25,6 +25,7 @@ It's plain HTML, CSS and JavaScript with nothing to install or build.
 | `supabase/schema.sql` | Creates the database tables |
 | `supabase/002_rating_rounds_and_admin.sql` | Adds rating rounds and the club admin |
 | `supabase/003_decimal_scores.sql` | Allows scores with one decimal (4,2) |
+| `supabase/004_import_old_ratings.sql` | Lets the admin import old ratings for members without an account (includes 003) |
 | `manifest.webmanifest`, `icon.svg` | Let the app be installed on a phone |
 
 ## 1. Try it on your computer
@@ -42,7 +43,7 @@ Then open http://localhost:8000.
 1. Create a free account at https://supabase.com and make a **New project**.
 2. In the project, open **SQL Editor → New query**, paste everything from
    `supabase/schema.sql`, and press **Run**. Then do the same with
-   `supabase/002_rating_rounds_and_admin.sql` and `supabase/003_decimal_scores.sql`.
+   `supabase/002_rating_rounds_and_admin.sql` and `supabase/004_import_old_ratings.sql`.
 3. Open **Project Settings → API** and copy the **Project URL** and the **anon public** key.
 4. Paste them into `config.js`:
 
@@ -83,6 +84,20 @@ To make someone else admin, run this in the SQL Editor with their email:
 ```sql
 insert into club_admins (user_id) select id from auth.users where email = 'their@email.com';
 ```
+
+**Importing old ratings**
+
+As admin, tap your name → **📋 Import old ratings** and paste text like this (several books at once is fine):
+
+```
+Khaled Hosseini - Drageløberen:
+Jasp:
+Indhold: 4.3
+Skriveri: 4.8
+```
+
+"Indhold" is Content and "Skriveri" is Language. The book is saved with rating closed. When a member
+later creates an account with the same name (e.g. "Jasp"), their imported scores are linked to them.
 
 **Better Google Books results (optional)**
 

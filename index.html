@@ -137,11 +137,31 @@
       <label>Your name
         <input id="nameInput" required maxlength="40" autocomplete="given-name">
       </label>
+      <button id="importOpenBtn" class="btn admin-tool" type="button" hidden>📋 Import old ratings</button>
       <div class="dialog-actions">
         <button id="signOutBtn" class="btn ghost danger" type="button" hidden>Sign out</button>
         <button class="btn primary" value="ok">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Import old ratings (admin) -->
+  <dialog id="importDialog" class="wide">
+    <div class="dialog-body">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="dialog-head">
+        <h2>Import old ratings</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
+      </div>
+      <p class="muted">Paste books the club rated before the app. Start each book with <b>Author - Title</b>, then each member's name with <b>Indhold</b> (Content) and <b>Skriveri</b> (Language). Totals are worked out by the app, so those lines are skipped. You can paste several books at once.</p>
+      <textarea id="importText" rows="9" spellcheck="false" placeholder="Khaled Hosseini - Drageløberen:&#10;&#10;Jasp:&#10;Indhold: 4.3&#10;Skriveri: 4.8&#10;&#10;Boas:&#10;Indhold: 4.7&#10;Skriveri: 4.7"></textarea>
+      <div id="importPreview" class="import-preview"></div>
+      <p class="muted small">Imported books are saved with rating closed. When a friend creates an account with the same name (for example "Jasp"), their scores are linked to them automatically.</p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button id="importBtn" class="btn primary" type="button" disabled>Import</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- Book details + scoring -->

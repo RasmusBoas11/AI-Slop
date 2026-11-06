@@ -109,6 +109,12 @@
         d.ratings = d.ratings.filter((r) => r.id !== id);
         save(d);
       },
+      async importRatings(rows) {
+        const d = load();
+        rows.forEach((r) => d.ratings.push({ ...r, id: uid(), created_at: new Date().toISOString() }));
+        save(d);
+      },
+      async claimRatings() { return 0; },
       async isAdmin() { return true; }, // on one device, you are the admin
     };
   }
@@ -122,6 +128,11 @@
       async deleteBook(id) { check(await sb.from('books').delete().eq('id', id)); },
       async saveRating(r) { check(await sb.from('ratings').upsert(r, { onConflict: 'book_id,user_id' })); },
       async deleteRating(id) { check(await sb.from('ratings').delete().eq('id', id)); },
+      async importRatings(rows) { check(await sb.from('ratings').insert(rows.map((r) => ({ ...r, user_id: null })))); },
+      async claimRatings() {
+        const { data, error } = await sb.rpc('claim_my_ratings');
+        return error ? 0 : Number(data) || 0;
+      },
       async isAdmin(userId) {
         const { data, error } = await sb.from('club_admins').select('user_id').eq('user_id', userId);
         return !error && data.length > 0;
@@ -172,6 +183,9 @@
       toast('Could not load books: ' + e.message, true);
     }
   }
+
+  // One key per person: their account, or their name for imported scores without an account
+  const memberKey = (r) => (SHARED && r.user_id ? r.user_id : 'name:' + String(r.member || '').trim().toLowerCase());
 
   // In shared mode a score belongs to a login; on one device it belongs to a name.
   function isMine(r) {
@@ -305,7 +319,7 @@
     }
     const allRatings = state.books.flatMap((b) => b.ratings || []);
     const members = new Map();
-    allRatings.forEach((r) => members.set(SHARED ? r.user_id : r.member, r.member));
+    allRatings.forEach((r) => members.set(memberKey(r), r.member));
     const clubAvg = avg(rated.map((x) => x.s.overall));
     const by = (key) => rated.slice().sort((a, b) => b.s[key] - a.s[key] || b.s.count - a.s.count);
 
@@ -331,7 +345,7 @@
     }).filter((x) => x.spread > 0).sort((a, b) => b.spread - a.spread).slice(0, 3);
 
     const readers = [...members.entries()].map(([key, name]) => ({
-      name, n: allRatings.filter((r) => (SHARED ? r.user_id : r.member) === key).length,
+      name, n: allRatings.filter((r) => memberKey(r) === key).length,
     })).sort((a, b) => b.n - a.n).slice(0, 5);
     const maxN = readers[0] ? readers[0].n : 1;
 
@@ -711,7 +725,118 @@
       $('#accountEmail').hidden = !state.user;
       $('#signOutBtn').hidden = false;
     }
+    $('#importOpenBtn').hidden = !state.isAdmin || !state.member;
     $('#nameDialog').showModal();
+  }
+
+  // ---------- Import old ratings (admin) ----------
+  // Reads text like:
+  //   Khaled Hosseini - Drageløberen:
+  //   Jasp:
+  //   Indhold: 4.3
+  //   Skriveri: 4.8
+  // "Indhold" = Content, "Skriveri"/"Sprog" = Language. Total lines are skipped (the app calculates them).
+  function parseImport(text) {
+    const books = [];
+    let book = null;
+    let member = null;
+    const problems = [];
+    for (const raw of String(text).split(/\r?\n/)) {
+      const line = raw.trim().replace(/:\s*$/, '').trim();
+      if (!line) continue;
+      if (/^(samlet|total|i alt|gennemsnit|average|overall)\b/i.test(line)) continue;
+      const score = line.match(/^(indhold|content|skriveri|sprog|language|skrivning)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*$/i);
+      if (score) {
+        if (!member) continue;
+        const v = Number(score[2].replace(',', '.'));
+        const key = /^(indhold|content)/i.test(score[1]) ? 'content' : 'language';
+        if (v < 1 || v > 5) problems.push(`${member.member}: ${score[1]} ${score[2]} is not between 1 and 5`);
+        else member[key] = round1(v);
+        continue;
+      }
+      const head = line.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+      if (head || !book) {
+        book = head ? { author: head[1].trim(), title: head[2].trim(), ratings: [] } : { author: '', title: line, ratings: [] };
+        books.push(book);
+        member = null;
+        continue;
+      }
+      member = { member: line, language: null, content: null };
+      book.ratings.push(member);
+    }
+    books.forEach((b) => {
+      b.ratings.filter((r) => r.language == null || r.content == null)
+        .forEach((r) => problems.push(`${r.member} on "${b.title}" is missing ${r.language == null ? 'Skriveri/Language' : 'Indhold/Content'}`));
+      b.ratings = b.ratings.filter((r) => r.language != null && r.content != null);
+    });
+    return { books: books.filter((b) => b.ratings.length), problems };
+  }
+
+  let importParsed = { books: [], problems: [] };
+
+  function renderImportPreview() {
+    importParsed = parseImport($('#importText').value);
+    const { books, problems } = importParsed;
+    $('#importBtn').disabled = !books.length;
+    $('#importBtn').textContent = books.length ? `Import ${plural(books.length, 'book', 'books')}` : 'Import';
+    $('#importPreview').innerHTML = (books.map((b) => {
+      const lang = avg(b.ratings.map((r) => r.language));
+      const cont = avg(b.ratings.map((r) => r.content));
+      const existing = findBook(b.title);
+      return `<div class="import-book">
+        <div class="import-head"><strong>${esc(b.title)}</strong>${b.author ? `<span class="muted"> by ${esc(b.author)}</span>` : ''}
+          ${existing ? '<span class="badge waiting">Already on the shelf: scores are added to it</span>' : ''}</div>
+        <div class="score-table">
+          <div class="st-row st-head"><span>Member</span><span>Lang</span><span>Cont</span><span>Total</span></div>
+          ${b.ratings.map((r) => `<div class="st-row"><span class="st-member">${avatarHtml(r.member)}<span>${esc(r.member)}</span></span>
+            <span>${fmt(r.language)}</span><span>${fmt(r.content)}</span><span class="st-overall">${fmt((r.language + r.content) / 2)}</span></div>`).join('')}
+          <div class="st-row st-foot"><span>Final score</span><span>${fmt(lang)}</span><span>${fmt(cont)}</span><span class="st-overall">${fmt((lang + cont) / 2)}</span></div>
+        </div>
+      </div>`;
+    }).join('')) + (problems.length ? `<div class="import-problems"><strong>Skipped:</strong><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : '');
+  }
+
+  const normTitle = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9æøå]/g, '');
+  const findBook = (title) => state.books.find((x) => normTitle(x.title) === normTitle(title));
+
+  async function runImport() {
+    const btn = $('#importBtn');
+    btn.disabled = true;
+    let done = 0;
+    try {
+      for (const b of importParsed.books) {
+        btn.textContent = `Importing ${done + 1} of ${importParsed.books.length}…`;
+        let book = findBook(b.title);
+        if (!book) {
+          // Find a cover, description and year online; a title match is required
+          let extra = {};
+          try {
+            const hits = await searchOnline(`${b.title} ${b.author}`.trim());
+            const hit = hits.find((h) => h.cover && normTitle(h.title).startsWith(normTitle(b.title)))
+              || hits.find((h) => normTitle(h.title).startsWith(normTitle(b.title)));
+            if (hit) extra = { cover: hit.cover || null, description: hit.description || null, year: hit.year || null };
+          } catch { /* no cover is fine */ }
+          book = await store.addBook({
+            title: b.title, author: b.author || null, ...extra, added_by: state.member || null,
+            rating_open: false, rating_closed_at: new Date().toISOString(),
+          });
+        }
+        const already = new Set((book.ratings || []).map((r) => String(r.member).trim().toLowerCase()));
+        const rows = b.ratings.filter((r) => !already.has(r.member.trim().toLowerCase()))
+          .map((r) => ({ book_id: book.id, member: r.member, language: r.language, content: r.content, comment: null }));
+        if (rows.length) await store.importRatings(rows);
+        done++;
+      }
+      $('#importDialog').close();
+      toast(`Imported ${plural(done, 'book', 'books')}`);
+      await refresh();
+    } catch (err) {
+      toast(`Import stopped after ${plural(done, 'book', 'books')}: ${err.message}`, true);
+      await refresh();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Import';
+    }
   }
 
   function renderMember() {
@@ -794,6 +919,8 @@
     if (state.user.id !== lastUserId) {
       lastUserId = state.user.id;
       state.isAdmin = await store.isAdmin(state.user.id);
+      const linked = await store.claimRatings();
+      if (linked) toast(`Welcome! ${plural(linked, 'earlier score was', 'earlier scores were')} linked to your account.`);
       refresh();
     }
   }
@@ -888,6 +1015,16 @@
       $('#nameDialog').close();
       await sb.auth.signOut();
     });
+
+    // Import old ratings (admin)
+    $('#importOpenBtn').addEventListener('click', () => {
+      $('#nameDialog').close();
+      $('#importText').value = '';
+      renderImportPreview();
+      $('#importDialog').showModal();
+    });
+    $('#importText').addEventListener('input', renderImportPreview);
+    $('#importBtn').addEventListener('click', runImport);
 
     // Sign in / create account
     $('#authForm').addEventListener('submit', submitAuth);
