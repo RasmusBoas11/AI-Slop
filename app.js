@@ -93,24 +93,25 @@
     };
   }
 
-  function supabaseStore() {
-    const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  function supabaseStore(sb) {
     const check = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
     return {
       async listBooks() { return check(await sb.from('books').select('*, ratings(*)')); },
       async addBook(book) { return check(await sb.from('books').insert(book).select().single()); },
       async updateBook(id, patch) { check(await sb.from('books').update(patch).eq('id', id)); },
       async deleteBook(id) { check(await sb.from('books').delete().eq('id', id)); },
-      async saveRating(r) { check(await sb.from('ratings').upsert(r, { onConflict: 'book_id,member' })); },
+      async saveRating(r) { check(await sb.from('ratings').upsert(r, { onConflict: 'book_id,user_id' })); },
       async deleteRating(id) { check(await sb.from('ratings').delete().eq('id', id)); },
     };
   }
 
   // ---------- State ----------
   let store;
+  let sb; // Supabase client (shared mode only)
   const state = {
     books: [],
-    member: readLocal('bookclub-member', ''),
+    user: null, // the signed-in Supabase user (shared mode only)
+    member: SHARED ? '' : readLocal('bookclub-member', ''),
     filter: '',
     sort: readLocal('bookclub-sort', 'recent'),
     openBookId: null,
@@ -211,8 +212,8 @@
     const b = state.books.find((x) => x.id === state.openBookId);
     if (!b) { $('#bookDialog').close(); return; }
     const s = scoresOf(b);
-    const mine = (b.ratings || []).find((r) => r.member === state.member);
-    const others = (b.ratings || []).slice().sort((x, y) => (x.member === state.member ? -1 : y.member === state.member ? 1 : x.member.localeCompare(y.member)));
+    const mine = (b.ratings || []).find(isMine);
+    const others = (b.ratings || []).slice().sort((x, y) => (isMine(x) ? -1 : isMine(y) ? 1 : x.member.localeCompare(y.member)));
     const tags = [b.year ? `Published ${b.year}` : '', b.read_on ? `Read ${fmtDate(b.read_on)}` : '', b.added_by ? `Added by ${b.added_by}` : '']
       .filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
     const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmt(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
@@ -256,7 +257,7 @@
           <li>
             ${avatarHtml(r.member)}
             <div class="bubble">
-              <div class="who">${esc(r.member)}${r.member === state.member ? ' (you)' : ''}
+              <div class="who">${esc(r.member)}${isMine(r) ? ' (you)' : ''}
                 <span>Language ${esc(r.language)} · Content ${esc(r.content)}</span></div>
               ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
             </div>
@@ -266,9 +267,18 @@
       ${b.description ? `<details><summary>About the book</summary><p>${esc(b.description)}</p></details>` : ''}
 
       <div class="dialog-actions">
-        <button class="btn ghost danger" type="button" data-action="delete-book">Delete book</button>
+        ${canDelete(b) ? '<button class="btn ghost danger" type="button" data-action="delete-book">Delete book</button>' : ''}
         <button class="btn" type="button" data-action="edit-book">Edit book</button>
       </div>`;
+  }
+
+  // In shared mode a score belongs to a login; on one device it belongs to a name.
+  function isMine(r) {
+    return SHARED ? Boolean(state.user) && r.user_id === state.user.id : r.member === state.member;
+  }
+  // Only the person who added a book may delete it (the database enforces this too).
+  function canDelete(b) {
+    return !SHARED || (state.user && b.added_by_id === state.user.id);
   }
 
   function openBook(id) {
@@ -390,7 +400,129 @@
   // ---------- Member name ----------
   function askName() {
     $('#nameInput').value = state.member;
+    if (SHARED) {
+      $('#nameTitle').textContent = 'Your account';
+      $('#nameLead').textContent = 'Your name is shown next to the scores you give.';
+      $('#accountEmail').textContent = state.user ? `Signed in as ${state.user.email}` : '';
+      $('#accountEmail').hidden = !state.user;
+      $('#signOutBtn').hidden = false;
+    }
     $('#nameDialog').showModal();
+  }
+
+  // ---------- Sign in / create account (shared mode) ----------
+  const appUrl = () => location.origin + location.pathname;
+  let authMode = 'signin';
+  let lastUserId = null;
+
+  function displayName(user) {
+    return (user.user_metadata && user.user_metadata.display_name) || (user.email || '').split('@')[0];
+  }
+
+  function friendlyAuthError(msg) {
+    if (/invalid login credentials/i.test(msg)) return 'Wrong email or password.';
+    if (/email not confirmed/i.test(msg)) return 'Please confirm your email first. Check your inbox for the link.';
+    if (/already registered/i.test(msg)) return 'That email already has an account. Try signing in instead.';
+    if (/password should be at least/i.test(msg)) return 'Your password needs at least 6 characters.';
+    if (/rate limit/i.test(msg)) return 'Too many attempts. Please wait a minute and try again.';
+    return msg;
+  }
+
+  function authMessage(text, isError) {
+    const el = $('#authMsg');
+    el.textContent = text || '';
+    el.className = 'auth-msg' + (isError ? ' error' : '');
+    el.hidden = !text;
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    document.querySelectorAll('#authView [data-only]').forEach((el) => {
+      el.hidden = !el.dataset.only.split(' ').includes(mode);
+    });
+    document.querySelectorAll('#authTabs [data-auth-mode]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.authMode === mode);
+      b.setAttribute('aria-selected', String(b.dataset.authMode === mode));
+    });
+    $('#authTabs').hidden = mode === 'forgot' || mode === 'reset';
+    $('#authSubmit').textContent = { signin: 'Sign in', signup: 'Create account', forgot: 'Send reset link', reset: 'Save new password' }[mode];
+    $('#authLead').textContent = {
+      signin: 'Sign in to see what the club is reading.',
+      signup: 'Join the club: make an account to add books and give scores.',
+      forgot: "Enter your email and we'll send you a link to choose a new password.",
+      reset: 'Choose a new password for your account.',
+    }[mode];
+    $('#authPassword').autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+    authMessage('');
+  }
+
+  function showAuth(mode) {
+    document.body.classList.add('signed-out');
+    document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+    $('#authView').hidden = false;
+    setAuthMode(mode || 'signin');
+  }
+
+  function hideAuth() {
+    document.body.classList.remove('signed-out');
+    $('#authView').hidden = true;
+  }
+
+  function applySession(session) {
+    state.user = session ? session.user : null;
+    if (!state.user) {
+      lastUserId = null;
+      state.member = '';
+      state.books = [];
+      showAuth(authMode === 'signup' ? 'signup' : 'signin');
+      return;
+    }
+    state.member = displayName(state.user);
+    renderMember();
+    hideAuth();
+    if (state.user.id !== lastUserId) { lastUserId = state.user.id; refresh(); }
+  }
+
+  async function submitAuth(e) {
+    e.preventDefault();
+    const name = $('#authName').value.trim();
+    const email = $('#authEmail').value.trim();
+    const password = $('#authPassword').value;
+    if (authMode === 'signup' && !name) return authMessage('Please tell us your name.', true);
+    if (authMode !== 'reset' && !/^\S+@\S+\.\S+$/.test(email)) return authMessage('Please enter a valid email address.', true);
+    if (authMode !== 'forgot' && password.length < 6) return authMessage('Your password needs at least 6 characters.', true);
+
+    const btn = $('#authSubmit');
+    btn.disabled = true;
+    try {
+      if (authMode === 'signin') {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else if (authMode === 'signup') {
+        const { data, error } = await sb.auth.signUp({
+          email, password, options: { data: { display_name: name }, emailRedirectTo: appUrl() },
+        });
+        if (error) throw error;
+        if (!data.session) {
+          setAuthMode('signin');
+          authMessage(`Almost done! We sent an email to ${email}. Click the link in it, then sign in here.`);
+        }
+      } else if (authMode === 'forgot') {
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: appUrl() });
+        if (error) throw error;
+        authMessage('If that email has an account, a reset link is on its way. Check your inbox.');
+      } else if (authMode === 'reset') {
+        const { data, error } = await sb.auth.updateUser({ password });
+        if (error) throw error;
+        authMode = 'signin';
+        toast('Password changed');
+        applySession({ user: data.user });
+      }
+    } catch (err) {
+      authMessage(friendlyAuthError(err.message || String(err)), true);
+    } finally {
+      btn.disabled = false;
+    }
   }
   function renderMember() {
     $('#memberBtn').innerHTML = state.member
@@ -422,14 +554,29 @@
 
     // Name
     $('#nameDialog').addEventListener('cancel', (e) => { if (!state.member) e.preventDefault(); });
-    $('#nameForm').addEventListener('submit', () => {
+    $('#nameForm').addEventListener('submit', async () => {
       const name = $('#nameInput').value.trim();
-      if (!name) return;
+      if (!name || name === state.member) return;
+      if (SHARED) {
+        const { error } = await sb.auth.updateUser({ data: { display_name: name } });
+        if (error) { toast('Could not change your name: ' + error.message, true); return; }
+      } else {
+        writeLocal('bookclub-member', name);
+      }
       state.member = name;
-      writeLocal('bookclub-member', name);
       renderMember();
+      toast('Name saved');
       if ($('#bookDialog').open) renderBook();
     });
+    $('#signOutBtn').addEventListener('click', async () => {
+      $('#nameDialog').close();
+      await sb.auth.signOut();
+    });
+
+    // Sign in / create account
+    $('#authForm').addEventListener('submit', submitAuth);
+    document.querySelectorAll('#authView [data-auth-mode]').forEach((b) =>
+      b.addEventListener('click', () => setAuthMode(b.dataset.authMode)));
 
     // Book detail: star pickers, save score, edit/delete
     const body = $('#bookBody');
@@ -471,7 +618,9 @@
       const btn = e.target.querySelector('[type="submit"]');
       btn.disabled = true;
       try {
-        await store.saveRating({ book_id: state.openBookId, member: state.member, language, content, comment: $('#rateComment').value.trim() || null });
+        const rating = { book_id: state.openBookId, member: state.member, language, content, comment: $('#rateComment').value.trim() || null };
+        if (SHARED) rating.user_id = state.user.id;
+        await store.saveRating(rating);
         toast('Score saved');
         await refresh();
       } catch (err) {
@@ -551,7 +700,7 @@
 
     // Pick up other members' changes when coming back to the app
     if (SHARED) {
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden && state.user) refresh(); });
     }
   }
 
@@ -559,25 +708,35 @@
   async function init() {
     const name = cfg.clubName || 'Book Club';
     $('#clubName').textContent = name;
+    $('#authClub').textContent = name;
     document.title = name;
     renderMember();
     bindEvents();
 
     if (SHARED) {
       try {
-        await loadScript(SUPABASE_SCRIPT);
-        store = supabaseStore();
+        if (!window.supabase) await loadScript(SUPABASE_SCRIPT);
+        sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+        store = supabaseStore(sb);
       } catch (e) {
         toast('Could not connect to the shared database. Check your internet connection.', true);
         return;
       }
-    } else {
-      store = localStore();
-      const n = $('#modeNotice');
-      n.textContent = 'Books are saved on this device only. To share one list with your club, add your Supabase details to config.js (see README).';
-      n.hidden = false;
+      // Fires once at start (with any saved login) and on every sign in / sign out.
+      sb.auth.onAuthStateChange((event, session) => {
+        setTimeout(() => {
+          if (event === 'PASSWORD_RECOVERY') { showAuth('reset'); return; }
+          if (authMode === 'reset' && !$('#authView').hidden) return; // finish choosing a new password first
+          applySession(session);
+        }, 0);
+      });
+      return;
     }
 
+    store = localStore();
+    const n = $('#modeNotice');
+    n.textContent = 'Books are saved on this device only. Connect the free Supabase database (see README) so club members can create a login and share one list.';
+    n.hidden = false;
     await refresh();
     if (!state.member) askName();
   }

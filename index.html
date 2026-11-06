@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Book Club</title>
   <meta name="description" content="Track the books our club has read and score them on language and content.">
-  <meta name="theme-color" content="#fafafa">
+  <meta name="theme-color" content="#5b5bd6">
   <!-- Lets the app be added to an iPhone home screen and open like a real app -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -62,16 +62,48 @@
 
   <button class="btn primary fab" type="button" data-action="add" aria-label="Add book">+</button>
 
-  <!-- Ask for the member's name -->
+  <!-- Sign in / create account (only when the shared Supabase database is set up) -->
+  <section id="authView" class="auth" hidden>
+    <div class="auth-card">
+      <img src="icon.svg" alt="" width="64" height="64">
+      <div>
+        <h1 id="authClub">Book Club</h1>
+        <p id="authLead" class="muted">Sign in to see what the club is reading.</p>
+      </div>
+      <div class="seg" id="authTabs" role="tablist">
+        <button type="button" role="tab" data-auth-mode="signin">Sign in</button>
+        <button type="button" role="tab" data-auth-mode="signup">Create account</button>
+      </div>
+      <form id="authForm" class="auth-form" novalidate>
+        <label data-only="signup">Your name
+          <input id="authName" maxlength="40" autocomplete="name" placeholder="Shown next to your scores">
+        </label>
+        <label data-only="signin signup forgot">Email
+          <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+        </label>
+        <label data-only="signin signup reset">Password
+          <input id="authPassword" type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters">
+        </label>
+        <p id="authMsg" class="auth-msg" role="alert" hidden></p>
+        <button id="authSubmit" class="btn primary" type="submit">Sign in</button>
+        <button type="button" class="link" data-auth-mode="forgot" data-only="signin">Forgot password?</button>
+        <button type="button" class="link" data-auth-mode="signin" data-only="forgot">Back to sign in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Your name (and account, when signed in) -->
   <dialog id="nameDialog">
     <form method="dialog" id="nameForm" class="dialog-body">
-      <h2>Who's reading?</h2>
-      <p class="muted">Your name is shown next to the scores you give. It's saved on this device.</p>
+      <h2 id="nameTitle">Who's reading?</h2>
+      <p id="nameLead" class="muted">Your name is shown next to the scores you give. It's saved on this device.</p>
+      <p id="accountEmail" class="muted account-email" hidden></p>
       <label>Your name
         <input id="nameInput" required maxlength="40" autocomplete="given-name">
       </label>
       <div class="dialog-actions">
-        <button class="btn primary" value="ok">Continue</button>
+        <button id="signOutBtn" class="btn ghost danger" type="button" hidden>Sign out</button>
+        <button class="btn primary" value="ok">Save</button>
       </div>
     </form>
   </dialog>

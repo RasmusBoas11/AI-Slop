@@ -7,6 +7,7 @@ own score, and the app shows the club's average.
 - Add books by **searching the internet** (Open Library and Google Books) or by typing them in
 - Add a **picture** of the book: the cover from the search, or a photo from your phone
 - Sort by best language, best content, best overall or when you read it
+- Members **create their own login** (email + password), and each person can only change their own scores
 - Works in any browser, and on iPhone it can be **added to the home screen** like a normal app
 
 It's plain HTML, CSS and JavaScript with nothing to install or build.
@@ -45,12 +46,27 @@ Then open http://localhost:8000.
    supabaseAnonKey: "eyJhbGciOi...",
    ```
 
-Now everyone who opens the app sees the same books and scores.
+5. Open **Authentication → URL Configuration** and set **Site URL** to the app's
+   address (your GitHub Pages link from step 3 below). Add the same address under
+   **Redirect URLs**. The links in sign-up and password-reset emails go there.
 
-> The anon key is *meant* to be public, so it's fine to have it in GitHub.
-> But anyone who knows the app's address can add or change books. That's fine for a
-> small private club. To lock it down later, add Supabase Auth (email login) and change
-> the policies in `schema.sql` to `to authenticated`.
+Now the app opens with a **Sign in / Create account** screen. Each member makes their
+own login, and everyone sees the same books and scores.
+
+> The anon key is *meant* to be public, so it's fine to have it in GitHub. The database
+> only lets signed-in members see or change anything, and only lets each person change
+> their own scores.
+
+**Logins, good to know**
+
+- New members get an email to confirm their address before they can sign in.
+  (You can turn that off under **Authentication → Sign In / Providers → Email → Confirm email**.)
+- "Forgot password?" on the sign-in screen sends a reset link by email.
+- Want only your club to join? Once everyone has an account, turn off
+  **Allow new users to sign up** under **Authentication → Sign In / Providers**.
+  You can still invite people later from **Authentication → Users → Invite user**.
+- Supabase's built-in email service only sends a few emails per hour. That's fine for
+  a book club; for more, connect your own email provider under **Authentication → Emails**.
 
 ## 3. Put it online (free with GitHub Pages)
 
@@ -65,6 +81,5 @@ The app now has its own icon and opens full-screen, like a normal app.
 
 ## Ideas for later
 
-- Logins, so only club members can make changes
 - A real iPhone app (Swift/SwiftUI) using the same Supabase database
 - "Next book" voting, meeting dates, favourite quotes
