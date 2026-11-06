@@ -271,12 +271,13 @@
     const grid = $('#grid');
     grid.innerHTML = list.map((b, i) => {
       const s = scoresOf(b);
-      const scores = s.count
-        ? `<div class="pills">
+      const scores = !s.count ? `<p class="unrated">Not scored yet</p>`
+        : statusOf(b) === 'closed'
+        ? `<div class="final-pill" title="Final score: average of everyone's Language and Content"><span class="star">★</span>${fmt(s.overall)}<small>Final score</small></div>`
+        : `<div class="pills">
              <span class="pill" title="Language"><span class="lbl">Lang</span><span class="star">★</span>${fmt(s.language)}</span>
              <span class="pill" title="Content"><span class="lbl">Content</span><span class="star">★</span>${fmt(s.content)}</span>
-           </div>`
-        : `<p class="unrated">Not scored yet</p>`;
+           </div>`;
       return `<button class="card" type="button" data-id="${esc(b.id)}" style="--i:${Math.min(i, 12)}">
           <span class="cover-wrap">${coverHtml(b)}${statusBadge(b)}</span>
           <div class="card-body">
@@ -445,7 +446,11 @@
     if (!b) { $('#bookDialog').close(); return; }
     const s = scoresOf(b);
     const mine = (b.ratings || []).find(isMine);
-    const others = (b.ratings || []).slice().sort((x, y) => (isMine(x) ? -1 : isMine(y) ? 1 : x.member.localeCompare(y.member)));
+    const closed = statusOf(b) === 'closed';
+    const memberOverall = (r) => (r.language + r.content) / 2;
+    // Highest overall first; ties by name
+    const rows = (b.ratings || []).slice().sort((x, y) => memberOverall(y) - memberOverall(x) || x.member.localeCompare(y.member));
+    const comments = rows.filter((r) => r.comment);
     const tags = [b.year ? `Published ${b.year}` : '', b.read_on ? `Read ${fmtMonth(b.read_on)}` : '', b.added_by ? `Added by ${b.added_by}` : '']
       .filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
     const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmt(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
@@ -466,25 +471,62 @@
           </div>
         </div>
       </div>
+      ${closed && s.count ? `
+      <div class="final-card">
+        <div class="final-main">
+          <div class="label">Final score</div>
+          <div class="final-num">${fmt(s.overall)}</div>
+          <span class="stars" style="--v:${s.overall}" aria-hidden="true">★★★★★</span>
+        </div>
+        <div class="final-parts">
+          <div><span>Language</span><b>${fmt(s.language)}</b></div>
+          <div><span>Content</span><b>${fmt(s.content)}</b></div>
+          <div><span>Members</span><b>${s.count}</b></div>
+        </div>
+      </div>` : `
       <div class="averages">
         ${avgBox(s.language, 'Language')}
         ${avgBox(s.content, 'Content')}
-        ${avgBox(s.overall, statusOf(b) === 'closed' ? 'Final score' : 'Overall', 'main')}
-      </div>
+        ${avgBox(s.overall, 'Overall so far', 'main')}
+      </div>`}
 
       ${roundPanel(b, s, mine)}
 
       <div class="panel">
-        <h3 class="section-title">Club scores (${s.count})</h3>
-        ${s.count ? `<ul class="rating-list">${others.map((r) => `
+        <h3 class="section-title">Who rated what (${s.count})</h3>
+        ${s.count ? `
+        <div class="score-table" role="table" aria-label="Scores per member">
+          <div class="st-row st-head" role="row">
+            <span role="columnheader">Member</span>
+            <span role="columnheader"><span class="long">Language</span><span class="short">Lang</span></span>
+            <span role="columnheader"><span class="long">Content</span><span class="short">Cont</span></span>
+            <span role="columnheader"><span class="long">Overall</span><span class="short">Total</span></span>
+          </div>
+          ${rows.map((r) => `
+          <div class="st-row${isMine(r) ? ' me' : ''}" role="row">
+            <span class="st-member" role="cell">${avatarHtml(r.member)}<span>${esc(r.member)}${isMine(r) ? ' <em>(you)</em>' : ''}</span></span>
+            <span role="cell">${fmt(r.language)}</span>
+            <span role="cell">${fmt(r.content)}</span>
+            <span role="cell" class="st-overall">${fmt(memberOverall(r))}</span>
+          </div>`).join('')}
+          <div class="st-row st-foot" role="row">
+            <span role="cell">${closed ? 'Final score' : 'Average'}</span>
+            <span role="cell">${fmt(s.language)}</span>
+            <span role="cell">${fmt(s.content)}</span>
+            <span role="cell" class="st-overall">${fmt(s.overall)}</span>
+          </div>
+        </div>
+        <p class="muted small">Overall (total) = the average of Language and Content.</p>
+        ${comments.length ? `<h4 class="comments-title">Comments</h4>
+        <ul class="rating-list">${comments.map((r) => `
           <li>
             ${avatarHtml(r.member)}
             <div class="bubble">
-              <div class="who">${esc(r.member)}${isMine(r) ? ' (you)' : ''}
-                <span>Language ${fmt(r.language)} · Content ${fmt(r.content)}</span></div>
-              ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
+              <div class="who">${esc(r.member)}${isMine(r) ? ' (you)' : ''}</div>
+              <p>${esc(r.comment)}</p>
             </div>
-          </li>`).join('')}</ul>` : '<p class="muted">Nobody has scored this book yet.</p>'}
+          </li>`).join('')}</ul>` : ''}`
+        : '<p class="muted">Nobody has scored this book yet.</p>'}
       </div>
 
       ${b.description ? `<details><summary>About the book</summary><p>${esc(b.description)}</p></details>` : ''}
