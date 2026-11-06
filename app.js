@@ -42,6 +42,23 @@
     try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
   }
 
+  // The app's own "Are you sure?" window. (The browser's built-in confirm() is blocked
+  // in some browsers and then silently answers "Cancel".)
+  function askConfirm({ title, text = '', ok = 'OK', danger = false }) {
+    return new Promise((resolve) => {
+      const d = $('#confirmDialog');
+      $('#confirmTitle').textContent = title;
+      $('#confirmText').textContent = text;
+      const okBtn = $('#confirmOk');
+      okBtn.textContent = ok;
+      okBtn.classList.toggle('danger-fill', danger);
+      d.returnValue = '';
+      d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true });
+      d.showModal();
+      okBtn.focus();
+    });
+  }
+
   let toastTimer;
   function toast(msg, isError) {
     const el = $('#toast');
@@ -124,7 +141,14 @@
     return {
       async listBooks() { return check(await sb.from('books').select('*, ratings(*)')); },
       async addBook(book) { return check(await sb.from('books').insert(book).select().single()); },
-      async updateBook(id, patch) { check(await sb.from('books').update(patch).eq('id', id)); },
+      async updateBook(id, patch) {
+        // Ask for the changed row back: if the database silently refused, nothing comes back
+        const rows = check(await sb.from('books').update(patch).eq('id', id).select('id, rating_open'));
+        if (!rows || !rows.length) throw new Error("the database didn't allow this change. Try signing out and in again.");
+        if ('rating_open' in patch && rows[0].rating_open !== patch.rating_open) {
+          throw new Error('the database kept the old rating status. Has update 002 been run in Supabase?');
+        }
+      },
       async deleteBook(id) { check(await sb.from('books').delete().eq('id', id)); },
       async saveRating(r) { check(await sb.from('ratings').upsert(r, { onConflict: 'book_id,user_id' })); },
       async deleteRating(id) { check(await sb.from('ratings').delete().eq('id', id)); },
@@ -1051,7 +1075,13 @@
       if (action === 'edit-book') { $('#bookDialog').close(); openEdit(book); }
       if (action === 'close-rating' || action === 'open-rating') {
         const open = action === 'open-rating';
-        if (!open && !confirm(`Close rating for "${book.title}"? Members can't change their scores after this.`)) return;
+        const wasClosed = statusOf(book) === 'closed';
+        const ok = await askConfirm(open
+          ? { title: wasClosed ? 'Reopen rating?' : 'Start rating?', ok: wasClosed ? '🔓 Reopen rating' : '▶ Start rating',
+              text: `Members can give or change their scores for "${book.title}" again until you close it.` }
+          : { title: 'Close rating?', ok: '🔒 Close rating',
+              text: `The average becomes the final score for "${book.title}", and members can't change their scores after this. You can reopen it later.` });
+        if (!ok) return;
         try {
           await store.updateBook(book.id, { rating_open: open });
           toast(open ? 'Rating is open' : 'Rating closed. Final score is in!');
@@ -1059,7 +1089,9 @@
         } catch (err) { toast('Could not change rating: ' + err.message, true); }
       }
       if (action === 'delete-book') {
-        if (!confirm(`Delete "${book.title}" and all its scores? This cannot be undone.`)) return;
+        const ok = await askConfirm({ title: 'Delete book?', ok: 'Delete book', danger: true,
+          text: `"${book.title}" and all its scores will be deleted. This cannot be undone.` });
+        if (!ok) return;
         try { await store.deleteBook(book.id); $('#bookDialog').close(); toast('Book deleted'); await refresh(); }
         catch (err) { toast('Could not delete: ' + err.message, true); }
       }

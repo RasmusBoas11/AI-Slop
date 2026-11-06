@@ -698,3 +698,13 @@ body.signed-out .topbar { display: none; }
 .import-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .import-problems { font-size: .85rem; color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); border-radius: 12px; padding: 10px 14px; }
 .import-problems ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* "Are you sure?" window */
+dialog.confirm { width: min(400px, calc(100vw - 32px)); }
+dialog.confirm h2 { font-size: 1.3rem; }
+.btn.danger-fill { background: var(--danger); color: #fff; box-shadow: none; }
+@media (max-width: 600px) {
+  dialog.confirm { width: calc(100vw - 32px); max-width: 400px; margin: auto; border-radius: 22px; }
+  dialog.confirm[open] { animation: pop .28s var(--ease); }
+  dialog.confirm .dialog-actions .btn { flex: 1; }
+}
