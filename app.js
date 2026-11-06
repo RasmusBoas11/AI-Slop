@@ -11,6 +11,10 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
   const avg = (nums) => (nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null);
   const fmt = (n) => (n == null ? '–' : n.toFixed(1));
+  // A stable colour (0–359) per title or name, for covers and avatars
+  const hue = (s) => { let h = 7; for (const c of String(s || '')) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
+  const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const avatarHtml = (name) => `<span class="avatar" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
   const fmtDate = (d) => {
     if (!d) return '';
     const date = new Date(d + 'T00:00:00');
@@ -134,12 +138,25 @@
 
   // ---------- Rendering: list ----------
   function coverHtml(book, cls = '') {
-    if (book.cover) return `<div class="cover ${cls}"><img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>`;
-    return `<div class="cover ${cls}">${esc(book.title || 'No cover')}</div>`;
+    const style = `style="--h:${hue(book.title)}"`;
+    if (book.cover) return `<div class="cover ${cls}" ${style}><img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>`;
+    return `<div class="cover ${cls}" ${style}>${esc(book.title || 'No cover')}</div>`;
   }
 
-  function starsHtml(v) {
-    return `<span class="stars" style="--v:${v ?? 0}" aria-hidden="true">★★★★★</span>`;
+  function renderOverview() {
+    const el = $('#overview');
+    const rated = state.books.map((b) => ({ b, s: scoresOf(b) })).filter((x) => x.s.count);
+    el.hidden = state.books.length === 0;
+    if (el.hidden) return;
+    const clubAvg = avg(rated.map((x) => x.s.overall));
+    const top = rated.sort((a, b) => b.s.overall - a.s.overall)[0];
+    const total = state.books.length;
+    el.innerHTML = `
+      <div class="stat"><div class="k">Books read</div><div class="v">${total}</div></div>
+      <div class="stat"><div class="k">Club average</div><div class="v">${fmt(clubAvg)} <small>/ 5</small></div></div>
+      <div class="stat"><div class="k">Top rated</div>${top
+        ? `<div class="v title">${esc(top.b.title)}</div><div class="sub">★ ${fmt(top.s.overall)} overall</div>`
+        : `<div class="v title">–</div><div class="sub">Score a book to see it here</div>`}</div>`;
   }
 
   function sortBooks(list) {
@@ -160,34 +177,27 @@
     const list = sortBooks(state.books.filter((b) => !q || `${b.title} ${b.author || ''}`.toLowerCase().includes(q)));
 
     const grid = $('#grid');
-    grid.innerHTML = list.map((b) => {
+    grid.innerHTML = list.map((b, i) => {
       const s = scoresOf(b);
       const scores = s.count
-        ? `<div class="scores">
-             <span class="label">Language</span>${starsHtml(s.language)}<span class="num">${fmt(s.language)}</span>
-             <span class="label">Content</span>${starsHtml(s.content)}<span class="num">${fmt(s.content)}</span>
+        ? `<div class="pills">
+             <span class="pill" title="Language"><span class="lbl">Lang</span><span class="star">★</span>${fmt(s.language)}</span>
+             <span class="pill" title="Content"><span class="lbl">Content</span><span class="star">★</span>${fmt(s.content)}</span>
            </div>`
         : `<p class="unrated">Not scored yet</p>`;
-      const meta = [
-        s.count ? `${s.count} ${s.count === 1 ? 'score' : 'scores'}` : '',
-        b.read_on ? `Read ${fmtDate(b.read_on)}` : '',
-      ].filter(Boolean).join(' · ');
-      return `<button class="card" type="button" data-id="${esc(b.id)}">
+      return `<button class="card" type="button" data-id="${esc(b.id)}" style="--i:${Math.min(i, 12)}">
           ${coverHtml(b)}
           <div class="card-body">
             <h3>${esc(b.title)}</h3>
             ${b.author ? `<p class="author">${esc(b.author)}</p>` : ''}
             ${scores}
-            ${meta ? `<p class="meta">${esc(meta)}</p>` : ''}
           </div>
         </button>`;
     }).join('');
 
     $('#empty').hidden = state.books.length > 0;
-    const total = state.books.length;
-    $('#stats').textContent = !total ? '' : q
-      ? `${list.length} of ${total} books`
-      : `${total} ${total === 1 ? 'book' : 'books'} read together`;
+    if (q && !list.length) grid.innerHTML = '<p class="muted">No books in your list match that search.</p>';
+    renderOverview();
   }
 
   // ---------- Rendering: book detail ----------
@@ -203,31 +213,36 @@
     const s = scoresOf(b);
     const mine = (b.ratings || []).find((r) => r.member === state.member);
     const others = (b.ratings || []).slice().sort((x, y) => (x.member === state.member ? -1 : y.member === state.member ? 1 : x.member.localeCompare(y.member)));
-    const info = [b.year ? `Published ${esc(b.year)}` : '', b.read_on ? `Read ${esc(fmtDate(b.read_on))}` : '', b.added_by ? `Added by ${esc(b.added_by)}` : ''].filter(Boolean).join(' · ');
+    const tags = [b.year ? `Published ${b.year}` : '', b.read_on ? `Read ${fmtDate(b.read_on)}` : '', b.added_by ? `Added by ${b.added_by}` : '']
+      .filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
+    const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmt(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
 
     $('#bookBody').innerHTML = `
-      <div class="dialog-head">
-        <span class="muted">Book</span>
-        <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
-      </div>
-      <div class="detail-top">
-        ${coverHtml(b, 'big')}
-        <div class="detail-info">
-          <h2>${esc(b.title)}</h2>
-          ${b.author ? `<p class="author">${esc(b.author)}</p>` : ''}
-          ${info ? `<p class="muted" style="font-size:.85rem">${info}</p>` : ''}
+      <div class="detail-hero" style="--h:${hue(b.title)}">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="dialog-head">
+          <span></span>
+          <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <div class="detail-top">
+          ${coverHtml(b, 'big')}
+          <div class="detail-info">
+            <h2>${esc(b.title)}</h2>
+            ${b.author ? `<p class="author">${esc(b.author)}</p>` : ''}
+            ${tags ? `<div class="tags">${tags}</div>` : ''}
+          </div>
         </div>
       </div>
       <div class="averages">
-        <div class="avg-box"><div class="big-num">${fmt(s.language)}</div><div class="label">Language</div></div>
-        <div class="avg-box"><div class="big-num">${fmt(s.content)}</div><div class="label">Content</div></div>
-        <div class="avg-box"><div class="big-num">${fmt(s.overall)}</div><div class="label">Overall</div></div>
+        ${avgBox(s.language, 'Language')}
+        ${avgBox(s.content, 'Content')}
+        ${avgBox(s.overall, 'Overall', 'main')}
       </div>
 
       <form class="panel" id="rateForm">
         <h3 class="section-title">${mine ? 'Your score' : 'Give your score'}</h3>
-        <div class="rate-row"><span class="label">Language</span>${pickerHtml('language', mine?.language)}</div>
-        <div class="rate-row"><span class="label">Content</span>${pickerHtml('content', mine?.content)}</div>
+        <div class="rate-row"><span class="label">Language<span class="hint">How well is it written?</span></span>${pickerHtml('language', mine?.language)}</div>
+        <div class="rate-row"><span class="label">Content<span class="hint">Story, ideas and characters</span></span>${pickerHtml('content', mine?.content)}</div>
         <textarea id="rateComment" rows="2" maxlength="1000" placeholder="A few words about the book (optional)">${esc(mine?.comment || '')}</textarea>
         <div class="dialog-actions">
           ${mine ? `<button class="btn ghost danger small" type="button" data-action="delete-rating" data-id="${esc(mine.id)}">Remove my score</button>` : ''}
@@ -239,10 +254,13 @@
         <h3 class="section-title">Club scores (${s.count})</h3>
         ${s.count ? `<ul class="rating-list">${others.map((r) => `
           <li>
-            <div class="who">${esc(r.member)}${r.member === state.member ? ' (you)' : ''}
-              <span>Language ${esc(r.language)} · Content ${esc(r.content)}</span></div>
-            ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
-          </li>`).join('')}</ul>` : '<p class="muted">Nobody has scored this book yet.</p>'}
+            ${avatarHtml(r.member)}
+            <div class="bubble">
+              <div class="who">${esc(r.member)}${r.member === state.member ? ' (you)' : ''}
+                <span>Language ${esc(r.language)} · Content ${esc(r.content)}</span></div>
+              ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
+            </div>
+          </li>`).join('')}</ul>` : '<p class="muted">Nobody has scored this book yet. Be the first!</p>'}
       </div>
 
       ${b.description ? `<details><summary>About the book</summary><p>${esc(b.description)}</p></details>` : ''}
@@ -361,7 +379,7 @@
   function renderResults(results) {
     lastResults = results;
     $('#searchResults').innerHTML = results.length
-      ? results.map((r, i) => `<button class="result" type="button" data-result="${i}">
+      ? results.map((r, i) => `<button class="result" type="button" data-result="${i}" style="--i:${i}">
           ${coverHtml(r)}
           <div><strong>${esc(r.title)}</strong><small>${esc([r.author, r.year].filter(Boolean).join(' · '))}</small></div>
           <span class="src">${esc(r.source)}</span>
@@ -375,7 +393,9 @@
     $('#nameDialog').showModal();
   }
   function renderMember() {
-    $('#memberBtn').textContent = state.member ? `👤 ${state.member}` : 'Set name';
+    $('#memberBtn').innerHTML = state.member
+      ? `${avatarHtml(state.member)}<span class="chip-name">${esc(state.member)}</span>`
+      : '<span class="chip-name" style="padding-left:7px">Set name</span>';
   }
 
   // ---------- Events ----------
@@ -422,7 +442,10 @@
         picker.querySelectorAll('button').forEach((btn) => {
           btn.classList.toggle('on', Number(btn.dataset.v) <= v);
           btn.setAttribute('aria-checked', String(Number(btn.dataset.v) === v));
+          btn.classList.remove('pop');
         });
+        void star.offsetWidth; // restart the little "pop" animation
+        star.classList.add('pop');
         return;
       }
       const action = e.target.closest('[data-action]')?.dataset.action;
@@ -462,7 +485,7 @@
       e.preventDefault();
       const q = $('#searchInput').value.trim();
       if (!q) return;
-      $('#searchResults').innerHTML = '<p class="muted">Searching…</p>';
+      $('#searchResults').innerHTML = '<p class="loading"><span class="spinner"></span>Searching the internet…</p>';
       try { renderResults(await searchOnline(q)); }
       catch (err) { $('#searchResults').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
     });
