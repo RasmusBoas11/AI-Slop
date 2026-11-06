@@ -103,11 +103,20 @@ Skriveri: 4.8
 "Indhold" is Content and "Skriveri" is Language. The book is saved with rating closed. When a member
 later creates an account with the same name (e.g. "Jasp"), their imported scores are linked to them.
 
-**Better Google Books results (optional)**
+**Many more search results with a free Google Books key (recommended)**
 
-Google Books often refuses searches without a key. The app works without it, but you can
-add a free key: create one at https://console.cloud.google.com (enable "Books API",
-then Credentials → Create API key) and put it in `config.js` as `googleBooksApiKey: "..."`.
+Google Books has the biggest catalogue, including many Danish books, but it refuses searches
+without a key. With a key the app also asks Google specifically for Danish-language books.
+
+1. Go to https://console.cloud.google.com and sign in with a Google account.
+2. Create a project (top bar → **New project**, any name, e.g. "Holtebois").
+3. **APIs & Services → Library**, search for **Books API**, click **Enable**.
+4. **APIs & Services → Credentials → Create credentials → API key**. Copy the key.
+5. Click the key → **Application restrictions: Websites** → add `https://rasmusboas11.github.io/*`
+   and under **API restrictions** pick **Books API**. Save. (This stops anyone else from using it.)
+6. Put it in `config.js` as `googleBooksApiKey: "AIza..."`.
+
+The Books API is free for normal use (1,000 searches a day).
 
 ## 3. Put it online (free with GitHub Pages)
 

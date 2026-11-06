@@ -282,6 +282,7 @@
   // ---------- Views ----------
   function setView(view) {
     state.view = view === 'stats' ? 'stats' : 'books';
+    $('#navTitle').textContent = state.view === 'stats' ? 'Statistics' : (cfg.clubName || 'Book Club').replace(/\s*book club$/i, '') || 'Books';
     $('#booksView').hidden = state.view !== 'books';
     $('#statsView').hidden = state.view !== 'stats';
     document.querySelectorAll('[data-view]').forEach((t) => {
@@ -755,15 +756,23 @@
   let lastResults = [];
   let pickToken = 0; // ignores late cover lookups after you pick another book
 
-  // Apple's Danish store also sells English books, so guess the language from the text
-  function looksDanish(text) {
-    const words = String(text).toLowerCase().match(/[a-zæøå]+/g) || [];
-    const da = new Set(['og', 'ikke', 'det', 'der', 'hun', 'han', 'som', 'med', 'til', 'på', 'af', 'er', 'en', 'et', 'hans', 'hendes', 'bliver', 'om']);
-    const en = new Set(['the', 'and', 'of', 'to', 'is', 'in', 'her', 'his', 'with', 'a', 'that', 'she', 'he', 'for']);
-    let d = 0, e = 0;
-    words.forEach((w) => { if (da.has(w)) d++; else if (en.has(w)) e++; });
-    return /[æøå]/i.test(text) ? d >= e : d > e;
+  // Apple's Danish store also sells English and other-language books, so guess the language from the text
+  const LANG_WORDS = {
+    da: ['og', 'ikke', 'hun', 'hendes', 'bliver', 'også', 'være', 'havde', 'blev', 'efter', 'hvor', 'hvad', 'sin', 'sit', 'sine', 'kun', 'mellem', 'jeg', 'mig', 'har', 'skal', 'deres', 'roman', 'bog', 'af'],
+    en: ['the', 'and', 'of', 'to', 'is', 'her', 'his', 'with', 'that', 'she', 'he', 'for', 'novel', 'book', 'this', 'from', 'their'],
+    other: ['el', 'los', 'las', 'una', 'del', 'por', 'und', 'der', 'die', 'das', 'ist', 'mit', 'nicht', 'le', 'les', 'des', 'est', 'une', 'dans', 'il', 'che', 'della', 'och', 'att', 'som', 'ett'],
+  };
+  function guessLanguage(text) {
+    const words = String(text).toLowerCase().match(/[a-zæøåäöüéèáíóúñ]+/g) || [];
+    const count = (list) => words.filter((w) => list.includes(w)).length;
+    const da = count(LANG_WORDS.da) + (/[æø]/i.test(text) ? 3 : 0);
+    const en = count(LANG_WORDS.en);
+    const other = count(LANG_WORDS.other) + (/[ñ¿¡äöüß]/i.test(text) ? 3 : 0);
+    if (da >= 2 && da > en && da > other) return 'da';
+    if (other > da && other > en) return 'other';
+    return 'en';
   }
+  const looksDanish = (text) => guessLanguage(text) === 'da';
 
   const getJson = (url, signal) => fetch(url, { signal }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
   const norm = (str) => String(str || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9æøå ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -780,7 +789,7 @@
     const base = whole.join(' ');
     const enc = (t) => encodeURIComponent(t);
     const gKey = cfg.googleBooksApiKey ? `&key=${enc(cfg.googleBooksApiKey)}` : '';
-    const apple = (term, media) => getJson(`https://itunes.apple.com/search?term=${enc(term)}&media=${media}&country=dk&limit=20`, signal);
+    const apple = (term, media, country = 'dk') => getJson(`https://itunes.apple.com/search?term=${enc(term)}&media=${media}&country=${country}&limit=25`, signal);
 
     const jobs = isIsbn ? [
       getJson(`https://openlibrary.org/search.json?isbn=${isbn}&limit=5&fields=title,author_name,first_publish_year,cover_i,language`, signal).then((d) => ({ ol: d })),
@@ -788,10 +797,14 @@
     ] : [
       apple(q, 'ebook').then((d) => ({ apple: d })),
       apple(q, 'audiobook').then((d) => ({ apple: d, audio: true })),
+      apple(q, 'ebook', 'us').then((d) => ({ apple: d })), // international titles and English editions
       // Apple can't match half-typed words, so also search the finished words and filter below
-      ...(prefix && base ? [apple(base, 'ebook').then((d) => ({ apple: d })), apple(base, 'audiobook').then((d) => ({ apple: d, audio: true }))] : []),
+      ...(prefix && base ? [apple(base, 'ebook').then((d) => ({ apple: d })), apple(base, 'audiobook').then((d) => ({ apple: d, audio: true })),
+        apple(base, 'ebook', 'us').then((d) => ({ apple: d }))] : []),
       getJson(`https://openlibrary.org/search.json?q=${enc(prefix && !base ? `title:${prefix}*` : (base || q))}&limit=15&fields=title,author_name,first_publish_year,cover_i,language`, signal).then((d) => ({ ol: d })),
-      getJson(`https://www.googleapis.com/books/v1/volumes?q=${enc(base || q)}&maxResults=15&printType=books&country=DK${gKey}`, signal).then((d) => ({ gb: d })),
+      getJson(`https://www.googleapis.com/books/v1/volumes?q=${enc(base || q)}&maxResults=20&printType=books&country=DK${gKey}`, signal).then((d) => ({ gb: d })),
+      // With a Google key, also ask specifically for Danish-language books
+      ...(cfg.googleBooksApiKey ? [getJson(`https://www.googleapis.com/books/v1/volumes?q=${enc(base || q)}&maxResults=20&printType=books&langRestrict=da&country=DK${gKey}`, signal).then((d) => ({ gb: d }))] : []),
     ];
     const settled = await Promise.allSettled(jobs);
     if (signal && signal.aborted) throw new DOMException('aborted', 'AbortError');
@@ -806,13 +819,16 @@
           const description = plainText(x.description);
           all.push({ title, author: x.artistName || '', year: null,
             cover: (x.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, value.audio ? '/600x600bb.' : '/600x900bb.'),
-            description, danish: looksDanish(`${title} ${description}`), source: value.audio ? 'Apple (audiobook)' : 'Apple Books' });
+            description, danish: looksDanish(`${title} ${description}`), foreign: guessLanguage(`${title} ${description}`) === 'other',
+            source: value.audio ? 'Apple (audiobook)' : 'Apple Books' });
         });
       }
       if (value.ol) {
         (value.ol.docs || []).forEach((d) => all.push({ title: cleanTitle(d.title), author: (d.author_name || []).slice(0, 2).join(', '),
           year: d.first_publish_year || null, cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : '',
-          description: '', danish: (d.language || [])[0] === 'dan', source: 'Open Library' }));
+          description: '', danish: (d.language || []).length === 1 && d.language[0] === 'dan',
+          foreign: !!(d.language && d.language.length && !d.language.some((l) => ['dan', 'eng'].includes(l))),
+          source: 'Open Library' }));
       }
       if (value.gb) {
         (value.gb.items || []).forEach((it) => {
@@ -821,7 +837,8 @@
           all.push({ title: cleanTitle(v.subtitle ? `${v.title}: ${v.subtitle}` : v.title), author: (v.authors || []).slice(0, 2).join(', '),
             year: v.publishedDate ? parseInt(v.publishedDate, 10) || null : null,
             cover: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') + '&fife=w600' : '',
-            description: plainText(v.description), danish: v.language === 'da', source: 'Google Books' });
+            description: plainText(v.description), danish: v.language === 'da', foreign: !!v.language && !['da', 'en'].includes(v.language),
+            source: 'Google Books' });
         });
       }
     });
@@ -843,14 +860,17 @@
       if (!prev.description && r.description) prev.description = r.description;
       if (r.year && (!prev.year || r.year < prev.year)) prev.year = r.year;
       prev.danish = prev.danish || r.danish;
+      prev.foreign = prev.foreign && r.foreign;
     });
+    // Letters Danish never uses mean a translation into another language
+    map.forEach((r) => { if (/[łąęśźżćńțșăčđžšőűçãõñ]/i.test(r.title)) { r.danish = false; r.foreign = true; } });
     // Titles that start with what you typed first, then books with a cover, then Danish
     const qn = norm(q);
-    const score = (r) => (norm(r.title).startsWith(qn) ? 4 : 0) + (r.cover ? 2 : 0) + (r.danish ? 1 : 0);
+    const score = (r) => (norm(r.title).startsWith(qn) ? 4 : 0) + (r.cover ? 2 : 0) + (r.danish ? 1.5 : 0) - (r.foreign ? 3 : 0);
     // Drop author-less copies of a book that is already listed with its author
     const withAuthor = new Set([...map.values()].filter((r) => r.author).map((r) => norm(r.title).replace(/ /g, '')));
     const list = [...map.values()].filter((r) => r.author || !withAuthor.has(norm(r.title).replace(/ /g, '')));
-    return list.sort((a, b) => score(b) - score(a) || a.i - b.i).slice(0, 20);
+    return list.sort((a, b) => score(b) - score(a) || a.i - b.i).slice(0, 30);
   }
 
   // Find a cover (and description/year) for a picked book that has none
@@ -1172,6 +1192,42 @@
     $('#filter').addEventListener('input', (e) => { state.filter = e.target.value; renderBooks(); });
     $('#sort').value = state.sort;
     $('#sort').addEventListener('change', (e) => { state.sort = e.target.value; writeLocal('bookclub-sort', state.sort); renderBooks(); });
+
+    // iPhone-style navigation bar: the small title fades in once the large title scrolls away
+    const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 64);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // Swipe a sheet down by its top area to close it, like on iPhone
+    document.querySelectorAll('dialog:not(.confirm)').forEach((d) => {
+      let startY = null;
+      let dy = 0;
+      d.addEventListener('pointerdown', (e) => {
+        if (!window.matchMedia('(max-width: 600px)').matches) return;
+        if (!e.target.closest('.sheet-handle, .dialog-head, .detail-hero') || e.target.closest('button, input, select, a, label')) return;
+        if (d.scrollTop > 0) return;
+        startY = e.clientY; dy = 0;
+        d.style.transition = 'none';
+      });
+      d.addEventListener('pointermove', (e) => {
+        if (startY == null) return;
+        dy = Math.max(0, e.clientY - startY);
+        d.style.transform = `translateY(${dy}px)`;
+      });
+      const end = () => {
+        if (startY == null) return;
+        startY = null;
+        d.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1)';
+        if (dy > 110 && !(d.id === 'nameDialog' && !state.member)) {
+          d.style.transform = 'translateY(100%)';
+          setTimeout(() => { d.close(); d.style.transform = ''; d.style.transition = ''; }, 200);
+        } else {
+          d.style.transform = '';
+        }
+      };
+      d.addEventListener('pointerup', end);
+      d.addEventListener('pointercancel', end);
+    });
 
     // Views (Books / Statistics)
     document.querySelectorAll('[data-view]').forEach((t) => t.addEventListener('click', (e) => {

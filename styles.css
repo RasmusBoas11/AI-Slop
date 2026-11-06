@@ -785,3 +785,177 @@ details.about summary { color: var(--muted); font-size: .9rem; }
   .sticky-actions .btn { flex: 1; }
   .find-box input { font-size: 16px; } /* 16px stops iPhone from zooming in on the field */
 }
+
+/* ============================================================
+   iPhone look & feel (Apple Human Interface Guidelines)
+   System font, iOS colours, large titles, translucent bars,
+   grouped lists, iOS slider and alerts.
+   ============================================================ */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-serif: -apple-system-headline, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+  --bg: #f2f2f7;               /* iOS grouped background */
+  --surface: #ffffff;
+  --surface-2: rgba(118, 118, 128, .12);  /* iOS fill */
+  --text: #000000;
+  --muted: rgba(60, 60, 67, .6);          /* iOS secondary label */
+  --border: rgba(60, 60, 67, .18);        /* iOS separator */
+  --accent: #5856d6;                      /* iOS system indigo */
+  --accent-2: #af52de;                    /* iOS system purple */
+  --accent-soft: rgba(88, 86, 214, .12);
+  --star: #ff9f0a;                        /* iOS system orange */
+  --danger: #ff3b30;                      /* iOS system red */
+  --bar-bg: rgba(249, 249, 249, .82);
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: rgba(118, 118, 128, .24);
+    --text: #ffffff;
+    --muted: rgba(235, 235, 245, .6);
+    --border: rgba(84, 84, 88, .65);
+    --accent: #5e5ce6;
+    --accent-2: #bf5af2;
+    --accent-text: #ffffff;
+    --accent-soft: rgba(94, 92, 230, .22);
+    --star: #ff9f0a;
+    --danger: #ff453a;
+    --bar-bg: rgba(29, 29, 31, .82);
+  }
+}
+body { font-family: var(--font-sans); letter-spacing: -.01em; }
+button, a, label, .card, .open-card, .rank-row, .result { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+input, textarea, select { -webkit-user-select: text; user-select: text; }
+input, select, textarea { background: var(--surface); }
+
+/* Touch screens: no hover effects, iOS-style dim when pressed */
+@media (hover: none) {
+  .card:hover .cover, .open-card:hover, .btn:hover, .result:hover, .rank-row:hover { transform: none; box-shadow: inherit; }
+  .btn:active, .chip:active, .icon-btn:active, .tab:active, .step:active, .manual-link:active { opacity: .55; transform: none; }
+  .card:active .cover { transform: scale(.97); }
+  .open-card:active, .rank-row:active, .result:active { background: var(--surface-2); }
+}
+
+/* Desktop: the tab switcher floats in the middle of the header */
+.nav-title { display: none; }
+@media (min-width: 601px) {
+  .tabs { position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 11; }
+  #addBtn .plus { margin-right: 2px; }
+}
+
+/* ---------- iPhone ---------- */
+@media (max-width: 600px) {
+  body { background: var(--bg); }
+  input, select, textarea { font-size: 16px; }  /* stops iPhone zooming into fields */
+
+  /* Navigation bar: avatar left, small title centre (after scrolling), + right */
+  .topbar {
+    min-height: 44px; padding: calc(6px + env(safe-area-inset-top)) 16px 6px;
+    background: var(--bar-bg); border-bottom: .5px solid transparent;
+    backdrop-filter: saturate(1.8) blur(20px); -webkit-backdrop-filter: saturate(1.8) blur(20px);
+    transition: border-color .2s;
+  }
+  body.scrolled .topbar { border-bottom-color: var(--border); }
+  .brand { display: none; }
+  .topbar-actions { display: contents; }
+  #memberBtn { order: -1; border: 0; background: none; padding: 0; max-width: none; }
+  #memberBtn .chip-name { display: none; }
+  #memberBtn .avatar { width: 34px; height: 34px; font-size: .85rem; }
+  .nav-title {
+    display: block; position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    font-weight: 600; font-size: 17px; letter-spacing: -.02em; white-space: nowrap;
+    opacity: 0; transition: opacity .2s;
+  }
+  body.scrolled .nav-title { opacity: 1; }
+  #addBtn { display: inline-flex !important; width: 34px; height: 34px; min-height: 0; padding: 0; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+  #addBtn .lbl { display: none; }
+  #addBtn .plus { font-size: 1.6rem; font-weight: 400; line-height: 1; margin-top: -2px; }
+  .fab { display: none !important; }
+
+  /* Large title */
+  main { padding: 4px 16px 120px; }
+  .hero { padding: 6px 0 20px; }
+  .hero-kicker { display: none; }
+  .hero-title { font-size: 34px; font-weight: 700; letter-spacing: .01em; line-height: 1.12; }
+  .hero-sub { font-size: 15px; margin-top: 4px; }
+  .hero-meta { border: 0; background: var(--surface); }
+  .page-head { padding: 6px 0 18px; }
+  .page-head h1 { font-size: 34px; letter-spacing: .01em; }
+
+  /* Tab bar: translucent, iOS proportions */
+  .tabs { background: var(--bar-bg); border-top: .5px solid var(--border); padding: 4px 8px calc(2px + env(safe-area-inset-bottom)); }
+  .tab { font-size: 10px; font-weight: 500; letter-spacing: .01em; gap: 1px; padding: 4px 0 2px; color: #8e8e93; }
+  .tab svg { width: 26px; height: 26px; }
+  .tab.on { color: var(--accent); }
+
+  /* Grouped, inset lists */
+  .notice { border-radius: 10px; }
+  .section-head h2 { font-size: 20px; font-weight: 700; letter-spacing: .01em; }
+  .open-section { background: none; border: 0; padding: 0; margin: 0 0 26px; }
+  .open-list { gap: 0; background: var(--surface); border-radius: 10px; overflow: hidden; }
+  .open-card { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 10px 12px; position: relative; animation: none; }
+  .open-card + .open-card::before { content: ""; position: absolute; top: 0; left: 70px; right: 0; border-top: .5px solid var(--border); }
+  .open-cta { border-radius: 999px; padding: 6px 14px; font-size: 15px; font-weight: 600; }
+  .search input, .toolbar select { border: 0; background: var(--surface-2); border-radius: 10px; min-height: 38px; }
+  .toolbar { flex-direction: row; gap: 8px; }
+  .toolbar select { width: auto; max-width: 44%; font-size: 15px; }
+  .stat, .stats-card { border: 0; box-shadow: none; border-radius: 10px; }
+  .stats-card h2 { font-size: 20px; font-weight: 700; }
+  .rank-row { border-radius: 0; padding: 10px 4px; }
+  .rank-list li + li .rank-row { border-top: .5px solid var(--border); }
+
+  /* Sheets */
+  dialog, dialog.wide { border-radius: 14px 14px 0 0; background: var(--bg); }
+  .book-editor, .book-editor .sticky-actions { background: var(--surface); }
+  .sheet-handle { width: 36px; height: 5px; background: rgba(127, 127, 127, .4); margin: -12px auto 2px; }
+  .dialog-head h2 { font-size: 17px; font-weight: 600; text-align: center; }
+  .book-editor .dialog-head h2 { text-align: center; }
+  .icon-btn { width: 30px; height: 30px; font-size: .8rem; font-weight: 700; background: var(--surface-2); }
+  .panel { background: var(--surface); border: 0; border-radius: 10px; }
+  .round.closed { background: var(--surface); }
+  .detail-hero { background: none; }
+  .final-card { border-radius: 14px; }
+  .score-table { background: var(--surface); border: 0; }
+  .btn { border-radius: 12px; }
+  .btn.primary { min-height: 50px; font-size: 17px; font-weight: 600; box-shadow: none; }
+  .btn.small { min-height: 34px; font-size: 15px; }
+  .find-box input { background: var(--surface-2); border-radius: 10px; min-height: 40px; padding-left: 40px; }
+  .find-box svg { left: 12px; width: 18px; }
+  .result { padding: 8px 4px; border-radius: 0; }
+  .results .result + .result { border-top: .5px solid var(--border); }
+  .field-grid label, .book-editor label { font-size: 13px; font-weight: 400; text-transform: uppercase; letter-spacing: .02em; }
+  .check { font-size: 15px; text-transform: none; }
+}
+
+/* iOS slider */
+.score-input input[type="range"] { height: 4px; }
+.score-input input[type="range"]::-webkit-slider-thumb {
+  width: 28px; height: 28px; border: 0; background: #fff;
+  box-shadow: 0 .5px 4px rgba(0, 0, 0, .12), 0 6px 13px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04);
+}
+.score-input.unset input[type="range"]::-webkit-slider-thumb { border: 0; }
+.score-input input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.step { background: var(--surface-2); border: 0; color: var(--accent); }
+
+/* iOS alert for "Are you sure?" */
+dialog.confirm {
+  width: 270px !important; max-width: 270px !important; margin: auto !important; padding: 0; border-radius: 14px !important;
+  background: color-mix(in srgb, var(--surface) 88%, transparent); text-align: center;
+  backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+}
+dialog.confirm[open] { animation: alert-in .22s cubic-bezier(.2, .8, .2, 1); }
+@keyframes alert-in { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: none; } }
+dialog.confirm .dialog-body { padding: 20px 16px 0; gap: 4px; }
+dialog.confirm h2 { font-size: 17px; font-weight: 600; }
+dialog.confirm p { font-size: 13px; color: var(--text); line-height: 1.35; margin-bottom: 16px; }
+dialog.confirm .dialog-actions { margin: 0 -16px; gap: 0; flex-wrap: nowrap; border-top: .5px solid var(--border); }
+dialog.confirm .dialog-actions .btn {
+  flex: 1; min-height: 44px; border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--accent); font-size: 17px; font-weight: 400;
+}
+dialog.confirm .dialog-actions .btn + .btn { border-left: .5px solid var(--border); font-weight: 600; }
+dialog.confirm .btn.danger-fill { color: var(--danger); background: none; }
+.cover-title { overflow-wrap: anywhere; hyphens: auto; }

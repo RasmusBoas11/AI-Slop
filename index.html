@@ -11,6 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Holtebois">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
@@ -25,19 +26,21 @@
       <img src="icon.svg" alt="" width="36" height="36">
       <span id="clubName" class="brand-name">Book Club</span>
     </div>
-    <nav class="tabs" aria-label="Pages">
-      <a href="#" data-view="books" class="tab on">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0A2 2 0 0 0 6 22h13"/></svg>
-        <span>Books</span></a>
-      <a href="#stats" data-view="stats" class="tab">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-        <span>Statistics</span></a>
-    </nav>
+
+    <span id="navTitle" class="nav-title" aria-hidden="true">Holtebois</span>
     <div class="topbar-actions">
       <button id="memberBtn" class="chip" type="button" title="Your account"></button>
-      <button id="addBtn" class="btn primary" type="button">+ Add book</button>
+      <button id="addBtn" class="btn primary" type="button" aria-label="Add book"><span class="plus" aria-hidden="true">+</span><span class="lbl">Add book</span></button>
     </div>
   </header>
+  <nav class="tabs" aria-label="Pages">
+    <a href="#" data-view="books" class="tab on">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0A2 2 0 0 0 6 22h13"/></svg>
+      <span>Books</span></a>
+    <a href="#stats" data-view="stats" class="tab">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <span>Statistics</span></a>
+  </nav>
 
   <main>
     <p id="modeNotice" class="notice" hidden></p>
