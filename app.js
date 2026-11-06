@@ -32,12 +32,12 @@
   const fmtDate = (d) => {
     if (!d) return '';
     const date = new Date(d.length === 10 ? d + 'T00:00:00' : d);
-    return isNaN(date) ? d : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return isNaN(date) ? d : date.toLocaleDateString('da-DK', { day: 'numeric', month: 'short', year: 'numeric' });
   };
   const fmtMonth = (d) => {
     if (!d) return '';
     const date = new Date(d + 'T00:00:00');
-    return isNaN(date) ? d : date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    return isNaN(date) ? d : date.toLocaleDateString('da-DK', { month: 'short', year: 'numeric' });
   };
   // Turn HTML descriptions (Apple/Google) into plain text
   const plainText = (html) => {
@@ -85,7 +85,7 @@
       const s = document.createElement('script');
       s.src = src;
       s.onload = resolve;
-      s.onerror = () => reject(new Error('Could not load ' + src));
+      s.onerror = () => reject(new Error('Kunne ikke hente ' + src));
       document.head.appendChild(s);
     });
   }
@@ -97,7 +97,7 @@
   function localStore() {
     const KEY = 'bookclub-data-v1';
     const load = () => readLocal(KEY, { books: [], ratings: [] });
-    const save = (d) => { if (!writeLocal(KEY, d)) throw new Error('Could not save on this device — storage may be full.'); };
+    const save = (d) => { if (!writeLocal(KEY, d)) throw new Error('Kunne ikke gemme på denne enhed – lageret er måske fuldt.'); };
     return {
       async listBooks() {
         const d = load();
@@ -165,7 +165,7 @@
       async addBook(book) {
         let res = await sb.from('books').insert(book).select().single();
         if (res.error && /selected_by|review_location/.test(res.error.message)) {
-          toast('Saved without "Selected by" and location: run update 005 in Supabase to save those.', true);
+          toast('Gemt uden "Valgt af" og sted: kør opdatering 005 i Supabase for at gemme dem.', true);
           const { selected_by, review_location, ...rest } = book;
           res = await sb.from('books').insert(rest).select().single();
         }
@@ -175,14 +175,14 @@
         // Ask for the changed row back: if the database silently refused, nothing comes back
         let res = await sb.from('books').update(patch).eq('id', id).select('id, rating_open');
         if (res.error && /selected_by|review_location/.test(res.error.message)) {
-          toast('Saved without "Selected by" and location: run update 005 in Supabase to save those.', true);
+          toast('Gemt uden "Valgt af" og sted: kør opdatering 005 i Supabase for at gemme dem.', true);
           const { selected_by, review_location, ...rest } = patch;
           res = await sb.from('books').update(rest).eq('id', id).select('id, rating_open');
         }
         const rows = check(res);
-        if (!rows || !rows.length) throw new Error("the database didn't allow this change. Try signing out and in again.");
+        if (!rows || !rows.length) throw new Error("databasen tillod ikke ændringen. Prøv at logge ud og ind igen.");
         if ('rating_open' in patch && rows[0].rating_open !== patch.rating_open) {
-          throw new Error('the database kept the old rating status. Has update 002 been run in Supabase?');
+          throw new Error('databasen beholdt den gamle status. Er opdatering 002 kørt i Supabase?');
         }
       },
       async deleteBook(id) { check(await sb.from('books').delete().eq('id', id)); },
@@ -201,7 +201,7 @@
         const row = { user_id: state.user.id, name: p.name, updated_at: new Date().toISOString() };
         if ('avatar' in p) row.avatar = p.avatar;
         const { error } = await sb.from('profiles').upsert(row, { onConflict: 'user_id' });
-        if (error) throw new Error(/profiles/.test(error.message) ? 'run update 005 in Supabase first.' : error.message);
+        if (error) throw new Error(/profiles/.test(error.message) ? 'kør opdatering 005 i Supabase først.' : error.message);
       },
       async isAdmin(userId) {
         const { data, error } = await sb.from('club_admins').select('user_id').eq('user_id', userId);
@@ -258,7 +258,7 @@
       render();
       if (state.openBookId && $('#bookDialog').open) renderBook();
     } catch (e) {
-      toast('Could not load books: ' + e.message, true);
+      toast('Kunne ikke hente bøger: ' + e.message, true);
     }
   }
 
@@ -282,7 +282,7 @@
   // ---------- Views ----------
   function setView(view) {
     state.view = view === 'stats' ? 'stats' : 'books';
-    $('#navTitle').textContent = state.view === 'stats' ? 'Statistics' : (cfg.clubName || 'Book Club').replace(/\s*book club$/i, '') || 'Books';
+    $('#navTitle').textContent = state.view === 'stats' ? 'Statistik' : (cfg.clubName || 'Book Club').replace(/\s*book club$/i, '') || 'Bøger';
     $('#booksView').hidden = state.view !== 'books';
     $('#statsView').hidden = state.view !== 'stats';
     document.querySelectorAll('[data-view]').forEach((t) => {
@@ -302,7 +302,7 @@
   // ---------- Rendering: books page ----------
   function coverHtml(book, cls = '') {
     const style = `style="--h:${hue(book.title)}"`;
-    const fallback = `<span class="cover-title">${esc(book.title || 'No cover')}</span>`;
+    const fallback = `<span class="cover-title">${esc(book.title || 'Intet omslag')}</span>`;
     // If a cover link breaks, the image removes itself and the coloured title cover shows instead
     if (book.cover) return `<div class="cover ${cls}" ${style}>${fallback}<img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>`;
     return `<div class="cover ${cls}" ${style}>${fallback}</div>`;
@@ -310,8 +310,8 @@
 
   function statusBadge(b) {
     const s = statusOf(b);
-    if (s === 'open') return '<span class="badge open"><i></i>Rating open</span>';
-    if (s === 'waiting') return '<span class="badge waiting">Not started</span>';
+    if (s === 'open') return '<span class="badge open"><i></i>Bedømmelse åben</span>';
+    if (s === 'waiting') return '<span class="badge waiting">Ikke startet</span>';
     return '';
   }
 
@@ -321,7 +321,7 @@
     const scores = state.books.reduce((n, b) => n + (b.ratings || []).length, 0);
     $('#heroTitle').textContent = name;
     $('#heroMeta').textContent = state.books.length
-      ? `${plural(state.books.length, 'book', 'books')} · ${plural(scores, 'score', 'scores')} · ${plural(rated.length, 'book rated', 'books rated')}`
+      ? `${plural(state.books.length, 'bog', 'bøger')} · ${plural(scores, 'bedømmelse', 'bedømmelser')} · ${plural(rated.length, 'bog bedømt', 'bøger bedømt')}`
       : '';
   }
 
@@ -340,9 +340,9 @@
         <span class="open-info">
           <strong>${esc(b.title)}</strong>
           <small>${esc(b.author || '')}</small>
-          <small class="open-progress">${n ? plural(n, 'score', 'scores') + ' so far' : 'No scores yet'}</small>
+          <small class="open-progress">${n ? plural(n, 'bedømmelse', 'bedømmelser') + ' indtil nu' : 'Ingen bedømmelser endnu'}</small>
         </span>
-        <span class="open-cta">${mine ? '✓ Rated' : 'Rate now'}</span>
+        <span class="open-cta">${mine ? '✓ Bedømt' : 'Bedøm nu'}</span>
       </button>`;
     }).join('');
   }
@@ -369,12 +369,12 @@
     const grid = $('#grid');
     grid.innerHTML = list.map((b, i) => {
       const s = scoresOf(b);
-      const scores = !s.count ? `<p class="unrated">Not scored yet</p>`
+      const scores = !s.count ? `<p class="unrated">Ikke bedømt endnu</p>`
         : statusOf(b) === 'closed'
-        ? `<div class="final-pill" title="Final score: average of everyone's Language and Content"><span class="star">★</span>${fmtAvg(s.overall)}<small>Final score</small></div>`
+        ? `<div class="final-pill" title="Endelig score: gennemsnit af alles skriveri og indhold"><span class="star">★</span>${fmtAvg(s.overall)}<small>Endelig score</small></div>`
         : `<div class="pills">
-             <span class="pill" title="Language"><span class="lbl">Lang</span><span class="star">★</span>${fmtAvg(s.language)}</span>
-             <span class="pill" title="Content"><span class="lbl">Content</span><span class="star">★</span>${fmtAvg(s.content)}</span>
+             <span class="pill" title="Skriveri"><span class="lbl">Skriveri</span><span class="star">★</span>${fmtAvg(s.language)}</span>
+             <span class="pill" title="Indhold"><span class="lbl">Indhold</span><span class="star">★</span>${fmtAvg(s.content)}</span>
            </div>`;
       return `<button class="card" type="button" data-id="${esc(b.id)}" style="--i:${Math.min(i, 12)}">
           <span class="cover-wrap">${coverHtml(b)}${statusBadge(b)}</span>
@@ -388,7 +388,7 @@
 
     $('#shelfSection').hidden = state.books.length === 0;
     $('#empty').hidden = state.books.length > 0;
-    if (q && !list.length) grid.innerHTML = '<p class="muted">No books in your list match that search.</p>';
+    if (q && !list.length) grid.innerHTML = '<p class="muted">Ingen bøger på listen passer til søgningen.</p>';
   }
 
   // ---------- Rendering: statistics page ----------
@@ -397,8 +397,8 @@
     const rated = state.books.map((b) => ({ b, s: scoresOf(b) })).filter((x) => x.s.count);
     if (!rated.length) {
       el.innerHTML = `<div class="empty"><div class="empty-art" aria-hidden="true">📊</div>
-        <p class="empty-title">No statistics yet</p>
-        <p>Once the club has scored a book, the top lists show up here.</p></div>`;
+        <p class="empty-title">Ingen statistik endnu</p>
+        <p>Når klubben har bedømt en bog, kommer toplisterne her.</p></div>`;
       return;
     }
     const allRatings = state.books.flatMap((b) => b.ratings || []);
@@ -413,13 +413,13 @@
         ${coverHtml(x.b, 'mini')}
         <span class="rank-info">
           <strong>${esc(x.b.title)}</strong>
-          <small>${esc(x.b.author || '')}${statusOf(x.b) === 'open' ? ' · <em>still open</em>' : ''}</small>
+          <small>${esc(x.b.author || '')}${statusOf(x.b) === 'open' ? ' · <em>stadig åben</em>' : ''}</small>
           ${key === 'overall' ? `<span class="bars">
-            <span class="bar"><span class="bar-lbl">Language</span><span class="track"><i style="--v:${x.s.language}"></i></span><b>${fmtAvg(x.s.language)}</b></span>
-            <span class="bar"><span class="bar-lbl">Content</span><span class="track"><i style="--v:${x.s.content}" class="alt"></i></span><b>${fmtAvg(x.s.content)}</b></span>
+            <span class="bar"><span class="bar-lbl">Skriveri</span><span class="track"><i style="--v:${x.s.language}"></i></span><b>${fmtAvg(x.s.language)}</b></span>
+            <span class="bar"><span class="bar-lbl">Indhold</span><span class="track"><i style="--v:${x.s.content}" class="alt"></i></span><b>${fmtAvg(x.s.content)}</b></span>
           </span>` : ''}
         </span>
-        <span class="rank-score">${fmtAvg(x.s[key])}<small>${plural(x.s.count, 'score', 'scores')}</small></span>
+        <span class="rank-score">${fmtAvg(x.s[key])}<small>${plural(x.s.count, 'bedømmelse', 'bedømmelser')}</small></span>
       </button></li>`;
 
     // Most divided: biggest gap between the highest and lowest member score
@@ -446,46 +446,46 @@
 
     el.innerHTML = `
       <div class="overview">
-        <div class="stat"><div class="k">Books read</div><div class="v">${state.books.length}</div></div>
-        <div class="stat"><div class="k">Scores given</div><div class="v">${allRatings.length}</div></div>
-        <div class="stat"><div class="k">Members scoring</div><div class="v">${members.size}</div></div>
-        <div class="stat accent"><div class="k">Club average</div><div class="v">${fmtAvg(clubAvg)} <small>/ 5</small></div></div>
+        <div class="stat"><div class="k">Bøger læst</div><div class="v">${state.books.length}</div></div>
+        <div class="stat"><div class="k">Bedømmelser</div><div class="v">${allRatings.length}</div></div>
+        <div class="stat"><div class="k">Medlemmer</div><div class="v">${members.size}</div></div>
+        <div class="stat accent"><div class="k">Klubbens snit</div><div class="v">${fmtAvg(clubAvg)} <small>/ 5</small></div></div>
       </div>
 
       <section class="stats-card">
-        <h2>🏆 Top rated books</h2>
-        <p class="muted">Average of Language and Content from everyone's scores.</p>
+        <h2>🏆 Bedst bedømte bøger</h2>
+        <p class="muted">Gennemsnit af alles point for skriveri og indhold.</p>
         <ol class="rank-list">${by('overall').slice(0, 10).map((x, i) => row(x, i, 'overall')).join('')}</ol>
       </section>
 
       <div class="stats-grid">
         <section class="stats-card">
-          <h2>✍️ Best language</h2>
+          <h2>✍️ Bedste skriveri</h2>
           <ol class="rank-list compact">${by('language').slice(0, 3).map((x, i) => row(x, i, 'language')).join('')}</ol>
         </section>
         <section class="stats-card">
-          <h2>💡 Best content</h2>
+          <h2>💡 Bedste indhold</h2>
           <ol class="rank-list compact">${by('content').slice(0, 3).map((x, i) => row(x, i, 'content')).join('')}</ol>
         </section>
         ${divided.length ? `<section class="stats-card">
-          <h2>⚡ Most divided opinions</h2>
-          <p class="muted">Biggest gap between the highest and lowest score.</p>
+          <h2>⚡ Mest delte meninger</h2>
+          <p class="muted">Største forskel mellem højeste og laveste score.</p>
           <ol class="rank-list compact">${divided.map((x, i) => `
             <li><button type="button" class="rank-row" data-id="${esc(x.b.id)}" style="--i:${i}">
               <span class="rank">${i + 1}</span>${coverHtml(x.b, 'mini')}
               <span class="rank-info"><strong>${esc(x.b.title)}</strong><small>${esc(x.b.author || '')}</small></span>
-              <span class="rank-score">${fmtAvg(x.spread)}<small>point gap</small></span>
+              <span class="rank-score">${fmtAvg(x.spread)}<small>points forskel</small></span>
             </button></li>`).join('')}</ol>
         </section>` : ''}
         ${pickers.length ? `<section class="stats-card">
-          <h2>🎯 Best book pickers</h2>
-          <p class="muted">Average score of the books each member selected.</p>
+          <h2>🎯 Bedste bogvælgere</h2>
+          <p class="muted">Gennemsnitlig score for de bøger, hvert medlem har valgt.</p>
           <ul class="reader-list">${pickers.map((r) => `
-            <li>${avatarHtml(r.name)}<span class="reader-name">${esc(r.name)}<small> · ${plural(r.scores.length, 'book', 'books')}</small></span>
+            <li>${avatarHtml(r.name)}<span class="reader-name">${esc(r.name)}<small> · ${plural(r.scores.length, 'bog', 'bøger')}</small></span>
               <span class="track"><i style="--v:${r.avg}"></i></span><b>${fmtAvg(r.avg)}</b></li>`).join('')}</ul>
         </section>` : ''}
         <section class="stats-card">
-          <h2>📚 Most active readers</h2>
+          <h2>📚 Mest aktive læsere</h2>
           <ul class="reader-list">${readers.map((r) => `
             <li>${avatarHtml(r.name, r.uid)}<span class="reader-name">${esc(r.name)}</span>
               <span class="track"><i style="--v:${(r.n / maxN) * 5}"></i></span><b>${r.n}</b></li>`).join('')}</ul>
@@ -497,16 +497,17 @@
   // A score from 1,0 to 5,0 in steps of 0,1: drag the slider, or tap − / + to fine-tune.
   function pickerHtml(name, value) {
     const v = value ? round1(value) : null;
+    const label = name === 'language' ? 'skriveri' : 'indhold';
     return `<div class="score-input${v ? '' : ' unset'}" data-name="${name}" data-value="${v || 0}">
-      <button type="button" class="step" data-step="-0.1" aria-label="Lower ${name} score">−</button>
+      <button type="button" class="step" data-step="-0.1" aria-label="Sænk point for ${label}">−</button>
       <div class="score-mid">
         <div class="score-top">
           <output class="score-val">${v ? fmt(v) : '–'}</output>
           <span class="stars" style="--v:${v || 0}" aria-hidden="true">★★★★★</span>
         </div>
-        <input type="range" min="1" max="5" step="0.1" value="${v || 3}" style="--p:${((v || 3) - 1) / 4 * 100}%" aria-label="${name} score from 1 to 5">
+        <input type="range" min="1" max="5" step="0.1" value="${v || 3}" style="--p:${((v || 3) - 1) / 4 * 100}%" aria-label="Point for ${label} fra 1 til 5">
       </div>
-      <button type="button" class="step" data-step="0.1" aria-label="Raise ${name} score">+</button>
+      <button type="button" class="step" data-step="0.1" aria-label="Hæv point for ${label}">+</button>
     </div>`;
   }
 
@@ -524,36 +525,36 @@
   function roundPanel(b, s, mine) {
     const status = statusOf(b);
     const adminBtn = !state.isAdmin ? '' : status === 'open'
-      ? '<button class="btn small" type="button" data-action="close-rating">🔒 Close rating</button>'
-      : `<button class="btn small" type="button" data-action="open-rating">${status === 'closed' ? '🔓 Reopen rating' : '▶ Start rating'}</button>`;
+      ? '<button class="btn small" type="button" data-action="close-rating">🔒 Luk bedømmelse</button>'
+      : `<button class="btn small" type="button" data-action="open-rating">${status === 'closed' ? '🔓 Genåbn bedømmelse' : '▶ Start bedømmelse'}</button>`;
 
     if (status === 'open') {
       return `<form class="panel round open" id="rateForm">
         <div class="round-head">
-          <span class="badge open"><i></i>Rating open</span>
-          <span class="muted small">${s.count ? plural(s.count, 'member has', 'members have') + ' scored' : 'Be the first to score'}</span>
+          <span class="badge open"><i></i>Bedømmelse åben</span>
+          <span class="muted small">${s.count ? plural(s.count, 'medlem har', 'medlemmer har') + ' bedømt' : 'Vær den første til at bedømme'}</span>
           ${adminBtn}
         </div>
-        <h3 class="section-title">${mine ? 'Your score' : 'Give your score'}</h3>
-        <div class="rate-row"><span class="label">Language<span class="hint">How well is it written?</span></span>${pickerHtml('language', mine?.language)}</div>
-        <div class="rate-row"><span class="label">Content<span class="hint">Story, ideas and characters</span></span>${pickerHtml('content', mine?.content)}</div>
-        <textarea id="rateComment" rows="2" maxlength="1000" placeholder="A few words about the book (optional)">${esc(mine?.comment || '')}</textarea>
+        <h3 class="section-title">${mine ? 'Din bedømmelse' : 'Giv din bedømmelse'}</h3>
+        <div class="rate-row"><span class="label">Skriveri<span class="hint">Hvor godt er den skrevet?</span></span>${pickerHtml('language', mine?.language)}</div>
+        <div class="rate-row"><span class="label">Indhold<span class="hint">Historie, idéer og personer</span></span>${pickerHtml('content', mine?.content)}</div>
+        <textarea id="rateComment" rows="2" maxlength="1000" placeholder="Et par ord om bogen (valgfrit)">${esc(mine?.comment || '')}</textarea>
         <div class="dialog-actions">
-          ${mine ? `<button class="btn ghost danger small" type="button" data-action="delete-rating" data-id="${esc(mine.id)}">Remove my score</button>` : ''}
-          <button class="btn primary" type="submit">${mine ? 'Update score' : 'Save score'}</button>
+          ${mine ? `<button class="btn ghost danger small" type="button" data-action="delete-rating" data-id="${esc(mine.id)}">Fjern min bedømmelse</button>` : ''}
+          <button class="btn primary" type="submit">${mine ? 'Opdatér bedømmelse' : 'Gem bedømmelse'}</button>
         </div>
       </form>`;
     }
     if (status === 'waiting') {
       return `<div class="panel round">
-        <div class="round-head"><span class="badge waiting">Not started</span>${adminBtn}</div>
-        <p class="muted">Rating hasn't started for this book yet. ${state.isAdmin ? 'Start it when the club is ready.' : 'The admin will open it when the club is ready.'}</p>
+        <div class="round-head"><span class="badge waiting">Ikke startet</span>${adminBtn}</div>
+        <p class="muted">Bedømmelsen er ikke startet for denne bog endnu. ${state.isAdmin ? 'Start den, når klubben er klar.' : 'Admin åbner den, når klubben er klar.'}</p>
       </div>`;
     }
     return `<div class="panel round closed">
-      <div class="round-head"><span class="badge closed">🔒 Rating closed</span>
-        <span class="muted small">${b.rating_closed_at ? 'on ' + esc(fmtDate(b.rating_closed_at)) : ''}</span>${adminBtn}</div>
-      <p class="muted">${s.count ? `Final score from ${plural(s.count, 'member', 'members')}.` : 'Nobody scored this book before rating closed.'}${mine ? ` You gave Language ${fmt(mine.language)} and Content ${fmt(mine.content)}.` : ''}</p>
+      <div class="round-head"><span class="badge closed">🔒 Bedømmelse lukket</span>
+        <span class="muted small">${b.rating_closed_at ? 'den ' + esc(fmtDate(b.rating_closed_at)) : ''}</span>${adminBtn}</div>
+      <p class="muted">${s.count ? `Endelig score fra ${plural(s.count, 'medlem', 'medlemmer')}.` : 'Ingen nåede at bedømme bogen, før bedømmelsen lukkede.'}${mine ? ` Du gav skriveri ${fmt(mine.language)} og indhold ${fmt(mine.content)}.` : ''}</p>
     </div>`;
   }
 
@@ -567,8 +568,8 @@
     // Highest overall first; ties by name
     const rows = (b.ratings || []).slice().sort((x, y) => memberOverall(y) - memberOverall(x) || x.member.localeCompare(y.member));
     const comments = rows.filter((r) => r.comment);
-    const tags = [b.selected_by ? `🎯 Selected by ${b.selected_by}` : '', b.review_location ? `📍 ${b.review_location}` : '',
-      b.read_on ? `Read ${fmtMonth(b.read_on)}` : '', b.year ? `Published ${b.year}` : '', b.added_by ? `Added by ${b.added_by}` : '']
+    const tags = [b.selected_by ? `🎯 Valgt af ${b.selected_by}` : '', b.review_location ? `📍 ${b.review_location}` : '',
+      b.read_on ? `Læst ${fmtMonth(b.read_on)}` : '', b.year ? `Udgivet ${b.year}` : '', b.added_by ? `Tilføjet af ${b.added_by}` : '']
       .filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
     const avgBox = (v, label, cls = '') => `<div class="avg-box ${cls}"><div class="big-num">${fmtAvg(v)}</div><div class="label">${label}</div><div class="meter" style="--v:${v ?? 0}"><i></i></div></div>`;
 
@@ -577,7 +578,7 @@
         <div class="sheet-handle" aria-hidden="true"></div>
         <div class="dialog-head">
           <span></span>
-          <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
+          <button class="icon-btn" type="button" data-close aria-label="Luk">✕</button>
         </div>
         <div class="detail-top">
           ${coverHtml(b, 'big')}
@@ -591,66 +592,66 @@
       ${closed && s.count ? `
       <div class="final-card">
         <div class="final-main">
-          <div class="label">Final score</div>
+          <div class="label">Endelig score</div>
           <div class="final-num">${fmtAvg(s.overall)}</div>
           <span class="stars" style="--v:${s.overall}" aria-hidden="true">★★★★★</span>
         </div>
         <div class="final-parts">
-          <div><span>Language</span><b>${fmtAvg(s.language)}</b></div>
-          <div><span>Content</span><b>${fmtAvg(s.content)}</b></div>
-          <div><span>Members</span><b>${s.count}</b></div>
+          <div><span>Skriveri</span><b>${fmtAvg(s.language)}</b></div>
+          <div><span>Indhold</span><b>${fmtAvg(s.content)}</b></div>
+          <div><span>Medlemmer</span><b>${s.count}</b></div>
         </div>
       </div>` : `
       <div class="averages">
-        ${avgBox(s.language, 'Language')}
-        ${avgBox(s.content, 'Content')}
-        ${avgBox(s.overall, 'Overall so far', 'main')}
+        ${avgBox(s.language, 'Skriveri')}
+        ${avgBox(s.content, 'Indhold')}
+        ${avgBox(s.overall, 'Samlet indtil nu', 'main')}
       </div>`}
 
       ${roundPanel(b, s, mine)}
 
       <div class="panel">
-        <h3 class="section-title">Who rated what (${s.count})</h3>
+        <h3 class="section-title">Hvem gav hvad (${s.count})</h3>
         ${s.count ? `
-        <div class="score-table" role="table" aria-label="Scores per member">
+        <div class="score-table" role="table" aria-label="Point pr. medlem">
           <div class="st-row st-head" role="row">
-            <span role="columnheader">Member</span>
-            <span role="columnheader"><span class="long">Language</span><span class="short">Lang</span></span>
-            <span role="columnheader"><span class="long">Content</span><span class="short">Cont</span></span>
-            <span role="columnheader"><span class="long">Overall</span><span class="short">Total</span></span>
+            <span role="columnheader">Medlem</span>
+            <span role="columnheader"><span class="long">Skriveri</span><span class="short">Skriv</span></span>
+            <span role="columnheader"><span class="long">Indhold</span><span class="short">Indh</span></span>
+            <span role="columnheader"><span class="long">Samlet</span><span class="short">Samlet</span></span>
           </div>
           ${rows.map((r) => `
           <div class="st-row${isMine(r) ? ' me' : ''}" role="row">
-            <span class="st-member" role="cell">${avatarHtml(r.member, r.user_id)}<span>${esc(r.member)}${isMine(r) ? ' <em>(you)</em>' : ''}</span></span>
+            <span class="st-member" role="cell">${avatarHtml(r.member, r.user_id)}<span>${esc(r.member)}${isMine(r) ? ' <em>(dig)</em>' : ''}</span></span>
             <span role="cell">${fmt(r.language)}</span>
             <span role="cell">${fmt(r.content)}</span>
             <span role="cell" class="st-overall">${fmtAvg(memberOverall(r))}</span>
           </div>`).join('')}
           <div class="st-row st-foot" role="row">
-            <span role="cell">${closed ? 'Final score' : 'Average'}</span>
+            <span role="cell">${closed ? 'Endelig score' : 'Gennemsnit'}</span>
             <span role="cell">${fmtAvg(s.language)}</span>
             <span role="cell">${fmtAvg(s.content)}</span>
             <span role="cell" class="st-overall">${fmtAvg(s.overall)}</span>
           </div>
         </div>
-        <p class="muted small">Overall (total) = the average of Language and Content.</p>
-        ${comments.length ? `<h4 class="comments-title">Comments</h4>
+        <p class="muted small">Samlet = gennemsnittet af skriveri og indhold.</p>
+        ${comments.length ? `<h4 class="comments-title">Kommentarer</h4>
         <ul class="rating-list">${comments.map((r) => `
           <li>
             ${avatarHtml(r.member, r.user_id)}
             <div class="bubble">
-              <div class="who">${esc(r.member)}${isMine(r) ? ' (you)' : ''}</div>
+              <div class="who">${esc(r.member)}${isMine(r) ? ' (dig)' : ''}</div>
               <p>${esc(r.comment)}</p>
             </div>
           </li>`).join('')}</ul>` : ''}`
-        : '<p class="muted">Nobody has scored this book yet.</p>'}
+        : '<p class="muted">Ingen har bedømt bogen endnu.</p>'}
       </div>
 
-      ${b.description ? `<details><summary>About the book</summary><p>${esc(b.description)}</p></details>` : ''}
+      ${b.description ? `<details><summary>Om bogen</summary><p>${esc(b.description)}</p></details>` : ''}
 
       <div class="dialog-actions">
-        ${canDelete(b) ? '<button class="btn ghost danger" type="button" data-action="delete-book">Delete book</button>' : ''}
-        <button class="btn" type="button" data-action="edit-book">Edit book</button>
+        ${canDelete(b) ? '<button class="btn ghost danger" type="button" data-action="delete-book">Slet bog</button>' : ''}
+        <button class="btn" type="button" data-action="edit-book">Redigér bog</button>
       </div>`;
   }
 
@@ -665,7 +666,7 @@
   // ---------- Add / edit book ----------
   function setCover(src) {
     state.edit.cover = src || '';
-    $('#coverPreview').innerHTML = src ? `<img src="${esc(src)}" alt="Book cover" referrerpolicy="no-referrer">` : 'No picture';
+    $('#coverPreview').innerHTML = src ? `<img src="${esc(src)}" alt="Bogens omslag" referrerpolicy="no-referrer">` : 'Intet billede';
     $('#coverRemove').hidden = !src;
   }
 
@@ -683,9 +684,9 @@
     const members = knownMembers();
     const cur = String(current || '').trim();
     if (cur && !members.some((m) => m.toLowerCase() === cur.toLowerCase())) members.push(cur);
-    $('#fSelectedBy').innerHTML = '<option value="">Not set</option>'
+    $('#fSelectedBy').innerHTML = '<option value="">Ikke angivet</option>'
       + members.map((m) => `<option value="${esc(m)}"${m.toLowerCase() === cur.toLowerCase() ? ' selected' : ''}>${esc(m)}</option>`).join('')
-      + '<option value="__other">Someone else…</option>';
+      + '<option value="__other">En anden…</option>';
     $('#fSelectedByOther').hidden = true;
     $('#fSelectedByOther').value = '';
   }
@@ -698,7 +699,7 @@
 
   function openEdit(book) {
     state.editingId = book ? book.id : null;
-    $('#editTitle').textContent = book ? 'Edit book' : 'Add a book';
+    $('#editTitle').textContent = book ? 'Redigér bog' : 'Tilføj en bog';
     showStep(book ? 'details' : 'find', { editing: Boolean(book) });
     $('#startRatingRow').hidden = Boolean(book);
     $('#fStartRating').checked = true;
@@ -745,7 +746,7 @@
         URL.revokeObjectURL(url);
         resolve(canvas.toDataURL('image/jpeg', 0.82));
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file is not a picture this browser can read.')); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Filen er ikke et billede, som browseren kan læse.')); };
       img.src = url;
     });
   }
@@ -809,7 +810,7 @@
     ];
     const settled = await Promise.allSettled(jobs);
     if (signal && signal.aborted) throw new DOMException('aborted', 'AbortError');
-    if (settled.every((x) => x.status === 'rejected')) throw new Error('Search is not reachable right now. Check your internet connection.');
+    if (settled.every((x) => x.status === 'rejected')) throw new Error('Søgningen svarer ikke lige nu. Tjek din internetforbindelse.');
 
     const all = [];
     settled.filter((x) => x.status === 'fulfilled').forEach(({ value }) => {
@@ -902,20 +903,20 @@
     $('#searchResults').innerHTML = results.length
       ? results.map((r, i) => `<button class="result" type="button" role="option" data-result="${i}" style="--i:${Math.min(i, 10)}">
           ${coverHtml(r)}
-          <span class="result-text"><strong>${esc(r.title)}</strong><small>${esc([r.author || (r.isbn ? 'ISBN ' + r.isbn : 'Unknown author'), r.year].filter(Boolean).join(' · '))}</small></span>
-          ${r.danish ? '<span class="flag" title="Danish">🇩🇰</span>' : ''}
+          <span class="result-text"><strong>${esc(r.title)}</strong><small>${esc([r.author || (r.isbn ? 'ISBN ' + r.isbn : 'Ukendt forfatter'), r.year].filter(Boolean).join(' · '))}</small></span>
+          ${r.danish ? '<span class="flag" title="Dansk">🇩🇰</span>' : ''}
         </button>`).join('')
-      : '<p class="find-empty">No matches yet. Keep typing, try the author\'s name, or add it yourself below.</p>';
+      : '<p class="find-empty">Ingen resultater endnu. Skriv videre, prøv forfatterens navn, eller tilføj den selv herunder.</p>';
   }
 
   // ---------- Member name / account ----------
   function askName() {
     $('#nameInput').value = state.member;
     if (SHARED) {
-      $('#nameTitle').textContent = 'Your account';
-      $('#nameLead').textContent = 'Your name is shown next to the scores you give.';
+      $('#nameTitle').textContent = 'Din profil';
+      $('#nameLead').textContent = 'Dit navn vises ved de point, du giver.';
       $('#accountEmail').innerHTML = state.user
-        ? `Signed in as ${esc(state.user.email)}${state.isAdmin ? ' <span class="badge admin">Admin</span>' : ''}` : '';
+        ? `Logget ind som ${esc(state.user.email)}${state.isAdmin ? ' <span class="badge admin">Admin</span>' : ''}` : '';
       $('#accountEmail').hidden = !state.user;
       $('#signOutBtn').hidden = false;
     }
@@ -949,7 +950,7 @@
         if (!member) continue;
         const v = Number(score[2].replace(',', '.'));
         const key = /^(indhold|content)/i.test(score[1]) ? 'content' : 'language';
-        if (v < 1 || v > 5) problems.push(`${member.member}: ${score[1]} ${score[2]} is not between 1 and 5`);
+        if (v < 1 || v > 5) problems.push(`${member.member}: ${score[1]} ${score[2]} er ikke mellem 1 og 5`);
         else member[key] = round1(v);
         continue;
       }
@@ -965,7 +966,7 @@
     }
     books.forEach((b) => {
       b.ratings.filter((r) => r.language == null || r.content == null)
-        .forEach((r) => problems.push(`${r.member} on "${b.title}" is missing ${r.language == null ? 'Skriveri/Language' : 'Indhold/Content'}`));
+        .forEach((r) => problems.push(`${r.member} på "${b.title}" mangler ${r.language == null ? 'Skriveri' : 'Indhold'}`));
       b.ratings = b.ratings.filter((r) => r.language != null && r.content != null);
     });
     return { books: books.filter((b) => b.ratings.length), problems };
@@ -977,23 +978,23 @@
     importParsed = parseImport($('#importText').value);
     const { books, problems } = importParsed;
     $('#importBtn').disabled = !books.length;
-    $('#importBtn').textContent = books.length ? `Import ${plural(books.length, 'book', 'books')}` : 'Import';
+    $('#importBtn').textContent = books.length ? `Importér ${plural(books.length, 'bog', 'bøger')}` : 'Importér';
     $('#importPreview').innerHTML = (books.map((b) => {
       const lang = avg(b.ratings.map((r) => r.language));
       const cont = avg(b.ratings.map((r) => r.content));
       const existing = findBook(b.title);
       return `<div class="import-book">
-        <div class="import-head"><strong>${esc(b.title)}</strong>${b.author ? `<span class="muted"> by ${esc(b.author)}</span>` : ''}
+        <div class="import-head"><strong>${esc(b.title)}</strong>${b.author ? `<span class="muted"> af ${esc(b.author)}</span>` : ''}
           ${b.selected_by ? `<span class="tag">🎯 ${esc(b.selected_by)}</span>` : ''}${b.review_location ? `<span class="tag">📍 ${esc(b.review_location)}</span>` : ''}
-          ${existing ? '<span class="badge waiting">Already on the shelf: scores are added to it</span>' : ''}</div>
+          ${existing ? '<span class="badge waiting">Findes allerede: point tilføjes til den</span>' : ''}</div>
         <div class="score-table">
-          <div class="st-row st-head"><span>Member</span><span>Lang</span><span>Cont</span><span>Total</span></div>
+          <div class="st-row st-head"><span>Medlem</span><span>Skriv</span><span>Indh</span><span>Samlet</span></div>
           ${b.ratings.map((r) => `<div class="st-row"><span class="st-member">${avatarHtml(r.member)}<span>${esc(r.member)}</span></span>
             <span>${fmt(r.language)}</span><span>${fmt(r.content)}</span><span class="st-overall">${fmtAvg((r.language + r.content) / 2)}</span></div>`).join('')}
-          <div class="st-row st-foot"><span>Final score</span><span>${fmtAvg(lang)}</span><span>${fmtAvg(cont)}</span><span class="st-overall">${fmtAvg((lang + cont) / 2)}</span></div>
+          <div class="st-row st-foot"><span>Endelig score</span><span>${fmtAvg(lang)}</span><span>${fmtAvg(cont)}</span><span class="st-overall">${fmtAvg((lang + cont) / 2)}</span></div>
         </div>
       </div>`;
-    }).join('')) + (problems.length ? `<div class="import-problems"><strong>Skipped:</strong><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : '');
+    }).join('')) + (problems.length ? `<div class="import-problems"><strong>Sprunget over:</strong><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : '');
   }
 
   const normTitle = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9æøå]/g, '');
@@ -1005,7 +1006,7 @@
     let done = 0;
     try {
       for (const b of importParsed.books) {
-        btn.textContent = `Importing ${done + 1} of ${importParsed.books.length}…`;
+        btn.textContent = `Importerer ${done + 1} af ${importParsed.books.length}…`;
         let book = findBook(b.title);
         if (!book) {
           // Find a cover, description and year online; a title match is required
@@ -1029,14 +1030,14 @@
         done++;
       }
       $('#importDialog').close();
-      toast(`Imported ${plural(done, 'book', 'books')}`);
+      toast(`Importerede ${plural(done, 'bog', 'bøger')}`);
       await refresh();
     } catch (err) {
-      toast(`Import stopped after ${plural(done, 'book', 'books')}: ${err.message}`, true);
+      toast(`Importen stoppede efter ${plural(done, 'bog', 'bøger')}: ${err.message}`, true);
       await refresh();
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Import';
+      btn.textContent = 'Importér';
     }
   }
 
@@ -1059,7 +1060,7 @@
         URL.revokeObjectURL(url);
         resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file is not a picture this browser can read.')); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Filen er ikke et billede, som browseren kan læse.')); };
       img.src = url;
     });
   }
@@ -1067,16 +1068,16 @@
   async function setProfilePicture(avatar) {
     try {
       await store.saveProfile({ name: state.member, avatar });
-      toast(avatar ? 'Profile picture saved' : 'Profile picture removed');
+      toast(avatar ? 'Profilbillede gemt' : 'Profilbillede fjernet');
       await refresh();
       renderProfilePic();
-    } catch (err) { toast('Could not save picture: ' + err.message, true); }
+    } catch (err) { toast('Kunne ikke gemme billedet: ' + err.message, true); }
   }
 
   function renderMember() {
     $('#memberBtn').innerHTML = state.member
       ? `${avatarHtml(state.member, state.user && state.user.id)}<span class="chip-name">${esc(state.member)}</span>`
-      : '<span class="chip-name" style="padding-left:7px">Set name</span>';
+      : '<span class="chip-name" style="padding-left:7px">Angiv navn</span>';
   }
 
   // ---------- Sign in / create account (shared mode) ----------
@@ -1089,11 +1090,11 @@
   }
 
   function friendlyAuthError(msg) {
-    if (/invalid login credentials/i.test(msg)) return 'Wrong email or password.';
-    if (/email not confirmed/i.test(msg)) return 'Please confirm your email first. Check your inbox for the link.';
-    if (/already registered/i.test(msg)) return 'That email already has an account. Try signing in instead.';
-    if (/password should be at least/i.test(msg)) return 'Your password needs at least 6 characters.';
-    if (/rate limit/i.test(msg)) return 'Too many attempts. Please wait a minute and try again.';
+    if (/invalid login credentials/i.test(msg)) return 'Forkert e-mail eller adgangskode.';
+    if (/email not confirmed/i.test(msg)) return 'Bekræft din e-mail først. Tjek din indbakke for linket.';
+    if (/already registered/i.test(msg)) return 'Den e-mail har allerede en profil. Prøv at logge ind i stedet.';
+    if (/password should be at least/i.test(msg)) return 'Din adgangskode skal have mindst 6 tegn.';
+    if (/rate limit/i.test(msg)) return 'For mange forsøg. Vent et minut, og prøv igen.';
     return msg;
   }
 
@@ -1114,12 +1115,12 @@
       b.setAttribute('aria-selected', String(b.dataset.authMode === mode));
     });
     $('#authTabs').hidden = mode === 'forgot' || mode === 'reset';
-    $('#authSubmit').textContent = { signin: 'Sign in', signup: 'Create account', forgot: 'Send reset link', reset: 'Save new password' }[mode];
+    $('#authSubmit').textContent = { signin: 'Log ind', signup: 'Opret profil', forgot: 'Send link', reset: 'Gem ny adgangskode' }[mode];
     $('#authLead').textContent = {
-      signin: 'Sign in to see what the club is reading.',
-      signup: 'Join the club: make an account to add books and give scores.',
-      forgot: "Enter your email and we'll send you a link to choose a new password.",
-      reset: 'Choose a new password for your account.',
+      signin: 'Log ind for at se, hvad klubben læser.',
+      signup: 'Bliv en del af klubben: opret en profil for at tilføje bøger og give point.',
+      forgot: 'Skriv din e-mail, så sender vi et link, hvor du kan vælge en ny adgangskode.',
+      reset: 'Vælg en ny adgangskode til din profil.',
     }[mode];
     $('#authPassword').autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
     authMessage('');
@@ -1155,7 +1156,7 @@
       state.isAdmin = await store.isAdmin(state.user.id);
       const linked = await store.claimRatings();
       try { await store.saveProfile({ name: state.member }); } catch { /* fine before update 005 */ }
-      if (linked) toast(`Welcome! ${plural(linked, 'earlier score was', 'earlier scores were')} linked to your account.`);
+      if (linked) toast(`Velkommen! ${plural(linked, 'tidligere bedømmelse', 'tidligere bedømmelser')} er koblet til din profil.`);
       refresh();
     }
   }
@@ -1165,9 +1166,9 @@
     const name = $('#authName').value.trim();
     const email = $('#authEmail').value.trim();
     const password = $('#authPassword').value;
-    if (authMode === 'signup' && !name) return authMessage('Please tell us your name.', true);
-    if (authMode !== 'reset' && !/^\S+@\S+\.\S+$/.test(email)) return authMessage('Please enter a valid email address.', true);
-    if (authMode !== 'forgot' && password.length < 6) return authMessage('Your password needs at least 6 characters.', true);
+    if (authMode === 'signup' && !name) return authMessage('Skriv venligst dit navn.', true);
+    if (authMode !== 'reset' && !/^\S+@\S+\.\S+$/.test(email)) return authMessage('Skriv en gyldig e-mailadresse.', true);
+    if (authMode !== 'forgot' && password.length < 6) return authMessage('Din adgangskode skal have mindst 6 tegn.', true);
 
     const btn = $('#authSubmit');
     btn.disabled = true;
@@ -1182,17 +1183,17 @@
         if (error) throw error;
         if (!data.session) {
           setAuthMode('signin');
-          authMessage(`Almost done! We sent an email to ${email}. Click the link in it, then sign in here.`);
+          authMessage(`Næsten færdig! Vi har sendt en e-mail til ${email}. Klik på linket i den, og log så ind her.`);
         }
       } else if (authMode === 'forgot') {
         const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: appUrl() });
         if (error) throw error;
-        authMessage('If that email has an account, a reset link is on its way. Check your inbox.');
+        authMessage('Hvis e-mailen har en profil, er et link på vej. Tjek din indbakke.');
       } else if (authMode === 'reset') {
         const { data, error } = await sb.auth.updateUser({ password });
         if (error) throw error;
         authMode = 'signin';
-        toast('Password changed');
+        toast('Adgangskoden er ændret');
         applySession({ user: data.user });
       }
     } catch (err) {
@@ -1273,14 +1274,14 @@
       if (!name || name === state.member) return;
       if (SHARED) {
         const { error } = await sb.auth.updateUser({ data: { display_name: name } });
-        if (error) { toast('Could not change your name: ' + error.message, true); return; }
+        if (error) { toast('Kunne ikke ændre dit navn: ' + error.message, true); return; }
       } else {
         writeLocal('bookclub-member', name);
       }
       try { await store.saveProfile({ name, oldName: state.member }); } catch { /* fine before update 005 */ }
       state.member = name;
       renderMember();
-      toast('Name saved');
+      toast('Navn gemt');
       if ($('#bookDialog').open) renderBook();
     });
     $('#signOutBtn').addEventListener('click', async () => {
@@ -1335,27 +1336,27 @@
         const open = action === 'open-rating';
         const wasClosed = statusOf(book) === 'closed';
         const ok = await askConfirm(open
-          ? { title: wasClosed ? 'Reopen rating?' : 'Start rating?', ok: wasClosed ? '🔓 Reopen rating' : '▶ Start rating',
-              text: `Members can give or change their scores for "${book.title}" again until you close it.` }
-          : { title: 'Close rating?', ok: '🔒 Close rating',
-              text: `The average becomes the final score for "${book.title}", and members can't change their scores after this. You can reopen it later.` });
+          ? { title: wasClosed ? 'Genåbn bedømmelse?' : 'Start bedømmelse?', ok: wasClosed ? '🔓 Genåbn' : '▶ Start',
+              text: `Medlemmerne kan give eller ændre deres point for "${book.title}", indtil du lukker igen.` }
+          : { title: 'Luk bedømmelse?', ok: '🔒 Luk',
+              text: `Gennemsnittet bliver den endelige score for "${book.title}", og medlemmerne kan ikke ændre deres point bagefter. Du kan genåbne den senere.` });
         if (!ok) return;
         try {
           await store.updateBook(book.id, { rating_open: open });
-          toast(open ? 'Rating is open' : 'Rating closed. Final score is in!');
+          toast(open ? 'Bedømmelsen er åben' : 'Bedømmelsen er lukket. Den endelige score er klar!');
           await refresh();
-        } catch (err) { toast('Could not change rating: ' + err.message, true); }
+        } catch (err) { toast('Kunne ikke ændre bedømmelsen: ' + err.message, true); }
       }
       if (action === 'delete-book') {
-        const ok = await askConfirm({ title: 'Delete book?', ok: 'Delete book', danger: true,
-          text: `"${book.title}" and all its scores will be deleted. This cannot be undone.` });
+        const ok = await askConfirm({ title: 'Slet bog?', ok: 'Slet', danger: true,
+          text: `"${book.title}" og alle dens point bliver slettet. Det kan ikke fortrydes.` });
         if (!ok) return;
-        try { await store.deleteBook(book.id); $('#bookDialog').close(); toast('Book deleted'); await refresh(); }
-        catch (err) { toast('Could not delete: ' + err.message, true); }
+        try { await store.deleteBook(book.id); $('#bookDialog').close(); toast('Bogen er slettet'); await refresh(); }
+        catch (err) { toast('Kunne ikke slette: ' + err.message, true); }
       }
       if (action === 'delete-rating') {
-        try { await store.deleteRating(e.target.closest('[data-id]').dataset.id); toast('Score removed'); await refresh(); }
-        catch (err) { toast('Could not remove score: ' + err.message, true); }
+        try { await store.deleteRating(e.target.closest('[data-id]').dataset.id); toast('Bedømmelsen er fjernet'); await refresh(); }
+        catch (err) { toast('Kunne ikke fjerne bedømmelsen: ' + err.message, true); }
       }
     });
     body.addEventListener('submit', async (e) => {
@@ -1363,17 +1364,17 @@
       if (!state.member) { askName(); return; }
       const language = round1($('.score-input[data-name="language"]', body).dataset.value);
       const content = round1($('.score-input[data-name="content"]', body).dataset.value);
-      if (!language || !content) { toast('Set a score from 1,0 to 5,0 for both Language and Content', true); return; }
+      if (!language || !content) { toast('Giv point fra 1,0 til 5,0 for både skriveri og indhold', true); return; }
       const btn = e.target.querySelector('[type="submit"]');
       btn.disabled = true;
       try {
         const rating = { book_id: state.openBookId, member: state.member, language, content, comment: $('#rateComment').value.trim() || null };
         if (SHARED) rating.user_id = state.user.id;
         await store.saveRating(rating);
-        toast('Score saved');
+        toast('Bedømmelse gemt');
         await refresh();
       } catch (err) {
-        toast('Could not save score: ' + (/row-level security/i.test(err.message) ? 'rating for this book is closed.' : err.message), true);
+        toast('Kunne ikke gemme bedømmelsen: ' + (/row-level security/i.test(err.message) ? 'bedømmelsen af bogen er lukket.' : err.message), true);
         btn.disabled = false;
       }
     });
@@ -1478,20 +1479,20 @@
       try {
         if (state.editingId) {
           await store.updateBook(state.editingId, data);
-          toast('Book updated');
+          toast('Bogen er opdateret');
           $('#editDialog').close();
           await refresh();
           openBook(state.editingId);
         } else {
           const startNow = $('#fStartRating').checked;
           const row = await store.addBook({ ...data, added_by: state.member || null, ...(startNow ? {} : { rating_open: false }) });
-          toast(startNow ? 'Book added. Rating is open!' : 'Book added');
+          toast(startNow ? 'Bogen er tilføjet. Bedømmelsen er åben!' : 'Bogen er tilføjet');
           $('#editDialog').close();
           await refresh();
           openBook(row.id);
         }
       } catch (err) {
-        toast('Could not save book: ' + err.message, true);
+        toast('Kunne ikke gemme bogen: ' + err.message, true);
       } finally {
         btn.disabled = false;
       }
@@ -1519,7 +1520,7 @@
         sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
         store = supabaseStore(sb);
       } catch (e) {
-        toast('Could not connect to the shared database. Check your internet connection.', true);
+        toast('Kunne ikke forbinde til den fælles database. Tjek din internetforbindelse.', true);
         return;
       }
       // Fires once at start (with any saved login) and on every sign in / sign out.
@@ -1536,7 +1537,7 @@
     store = localStore();
     state.isAdmin = true;
     const n = $('#modeNotice');
-    n.textContent = 'Books are saved on this device only. Connect the free Supabase database (see README) so club members can create a login and share one list.';
+    n.textContent = 'Bøgerne gemmes kun på denne enhed. Forbind den gratis Supabase-database (se README), så medlemmerne kan oprette en profil og dele én liste.';
     n.hidden = false;
     await refresh();
     if (!state.member) askName();

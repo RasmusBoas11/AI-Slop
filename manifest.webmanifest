@@ -1,7 +1,7 @@
 {
   "name": "Holtebois Book Club",
   "short_name": "Holtebois",
-  "description": "Track the books our club has read and score them on language and content.",
+  "description": "Hold styr på de bøger, klubben har læst, og giv dem point for skriveri og indhold.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

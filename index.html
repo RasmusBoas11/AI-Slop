@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="da">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Holtebois Book Club</title>
-  <meta name="description" content="Track the books our club has read and score them on language and content.">
+  <meta name="description" content="Hold styr på de bøger, klubben har læst, og giv dem point for skriveri og indhold.">
   <meta name="theme-color" content="#5b5bd6">
   <!-- Lets the app be added to an iPhone home screen and open like a real app -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="styles.css?v=202611070046">
+  <link rel="stylesheet" href="styles.css?v=202611070055">
 </head>
 <body>
   <header class="topbar">
@@ -29,17 +29,17 @@
 
     <span id="navTitle" class="nav-title" aria-hidden="true">Holtebois</span>
     <div class="topbar-actions">
-      <button id="memberBtn" class="chip" type="button" title="Your account"></button>
-      <button id="addBtn" class="btn primary" type="button" aria-label="Add book"><span class="plus" aria-hidden="true">+</span><span class="lbl">Add book</span></button>
+      <button id="memberBtn" class="chip" type="button" title="Din profil"></button>
+      <button id="addBtn" class="btn primary" type="button" aria-label="Tilføj bog"><span class="plus" aria-hidden="true">+</span><span class="lbl">Tilføj bog</span></button>
     </div>
   </header>
-  <nav class="tabs" aria-label="Pages">
+  <nav class="tabs" aria-label="Sider">
     <a href="#" data-view="books" class="tab on">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0A2 2 0 0 0 6 22h13"/></svg>
-      <span>Books</span></a>
+      <span>Bøger</span></a>
     <a href="#stats" data-view="stats" class="tab">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-      <span>Statistics</span></a>
+      <span>Statistik</span></a>
   </nav>
 
   <main>
@@ -48,34 +48,34 @@
     <!-- ===== Books page ===== -->
     <div id="booksView">
     <section class="hero">
-      <p class="hero-kicker">📚 Welcome to</p>
+      <p class="hero-kicker">📚 Velkommen til</p>
       <h1 id="heroTitle" class="hero-title">Book Club</h1>
-      <p class="hero-sub">What we read, and what we thought of it.</p>
+      <p class="hero-sub">Det vi læser – og hvad vi synes om det.</p>
       <p id="heroMeta" class="hero-meta"></p>
     </section>
 
     <section id="openSection" class="open-section" hidden>
       <div class="section-head">
-        <h2><span class="badge open"><i></i>Open for rating</span> <span id="openCount" class="count"></span></h2>
-        <p class="muted">Give your score for Language and Content before the admin closes the rating.</p>
+        <h2><span class="badge open"><i></i>Åben for bedømmelse</span> <span id="openCount" class="count"></span></h2>
+        <p class="muted">Giv dine point for skriveri og indhold, før admin lukker bedømmelsen.</p>
       </div>
       <div id="openList" class="open-list"></div>
     </section>
 
     <section id="shelfSection">
-    <div class="section-head"><h2>Our shelf</h2></div>
+    <div class="section-head"><h2>Vores bogreol</h2></div>
     <div class="toolbar">
       <div class="search">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="filter" type="search" placeholder="Find a book in our list…" aria-label="Find a book in our list">
+        <input id="filter" type="search" placeholder="Find en bog på listen…" aria-label="Find en bog på listen">
       </div>
-      <select id="sort" aria-label="Sort books">
-        <option value="recent">Recently added</option>
-        <option value="read">Recently read</option>
-        <option value="overall">Best overall</option>
-        <option value="language">Best language</option>
-        <option value="content">Best content</option>
-        <option value="title">Title A–Z</option>
+      <select id="sort" aria-label="Sortér bøger">
+        <option value="recent">Senest tilføjet</option>
+        <option value="read">Senest læst</option>
+        <option value="overall">Bedst samlet</option>
+        <option value="language">Bedst skriveri</option>
+        <option value="content">Bedst indhold</option>
+        <option value="title">Titel A–Å</option>
       </select>
     </div>
 
@@ -83,23 +83,23 @@
     </section>
     <div id="empty" class="empty" hidden>
       <div class="empty-art" aria-hidden="true">📚</div>
-      <p class="empty-title">Your shelf is empty</p>
-      <p>Add the first book your club is reading. Search for it online, then everyone can give their score.</p>
-      <button class="btn primary" type="button" data-action="add">+ Add your first book</button>
+      <p class="empty-title">Bogreolen er tom</p>
+      <p>Tilføj den første bog, klubben læser. Søg efter den, så kan alle give deres point.</p>
+      <button class="btn primary" type="button" data-action="add">+ Tilføj den første bog</button>
     </div>
     </div>
 
     <!-- ===== Statistics page ===== -->
     <div id="statsView" hidden>
       <section class="page-head">
-        <h1>Statistics</h1>
-        <p class="muted">The club's favourites, and who reads the most.</p>
+        <h1>Statistik</h1>
+        <p class="muted">Klubbens favoritter – og hvem der læser mest.</p>
       </section>
       <div id="statsBody"></div>
     </div>
   </main>
 
-  <button class="btn primary fab" type="button" data-action="add" aria-label="Add book">+</button>
+  <button class="btn primary fab" type="button" data-action="add" aria-label="Tilføj bog">+</button>
 
   <!-- Sign in / create account (only when the shared Supabase database is set up) -->
   <section id="authView" class="auth" hidden>
@@ -107,26 +107,26 @@
       <img src="icon.svg" alt="" width="64" height="64">
       <div>
         <h1 id="authClub">Book Club</h1>
-        <p id="authLead" class="muted">Sign in to see what the club is reading.</p>
+        <p id="authLead" class="muted">Log ind for at se, hvad klubben læser.</p>
       </div>
       <div class="seg" id="authTabs" role="tablist">
-        <button type="button" role="tab" data-auth-mode="signin">Sign in</button>
-        <button type="button" role="tab" data-auth-mode="signup">Create account</button>
+        <button type="button" role="tab" data-auth-mode="signin">Log ind</button>
+        <button type="button" role="tab" data-auth-mode="signup">Opret profil</button>
       </div>
       <form id="authForm" class="auth-form" novalidate>
-        <label data-only="signup">Your name
-          <input id="authName" maxlength="40" autocomplete="name" placeholder="Shown next to your scores">
+        <label data-only="signup">Dit navn
+          <input id="authName" maxlength="40" autocomplete="name" placeholder="Vises ved dine point">
         </label>
-        <label data-only="signin signup forgot">Email
-          <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+        <label data-only="signin signup forgot">E-mail
+          <input id="authEmail" type="email" autocomplete="email" placeholder="dig@eksempel.dk">
         </label>
-        <label data-only="signin signup reset">Password
-          <input id="authPassword" type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters">
+        <label data-only="signin signup reset">Adgangskode
+          <input id="authPassword" type="password" minlength="6" autocomplete="current-password" placeholder="Mindst 6 tegn">
         </label>
         <p id="authMsg" class="auth-msg" role="alert" hidden></p>
-        <button id="authSubmit" class="btn primary" type="submit">Sign in</button>
-        <button type="button" class="link" data-auth-mode="forgot" data-only="signin">Forgot password?</button>
-        <button type="button" class="link" data-auth-mode="signin" data-only="forgot">Back to sign in</button>
+        <button id="authSubmit" class="btn primary" type="submit">Log ind</button>
+        <button type="button" class="link" data-auth-mode="forgot" data-only="signin">Glemt adgangskode?</button>
+        <button type="button" class="link" data-auth-mode="signin" data-only="forgot">Tilbage til log ind</button>
       </form>
     </div>
   </section>
@@ -134,25 +134,25 @@
   <!-- Your name (and account, when signed in) -->
   <dialog id="nameDialog">
     <form method="dialog" id="nameForm" class="dialog-body">
-      <h2 id="nameTitle">Who's reading?</h2>
-      <p id="nameLead" class="muted">Your name is shown next to the scores you give. It's saved on this device.</p>
+      <h2 id="nameTitle">Hvem læser?</h2>
+      <p id="nameLead" class="muted">Dit navn vises ved de point, du giver. Det gemmes på denne enhed.</p>
       <p id="accountEmail" class="muted account-email" hidden></p>
       <div id="profileRow" class="profile-row" hidden>
         <span id="profilePic" class="avatar xl"></span>
         <div class="profile-actions">
-          <label class="btn small">📷 Upload picture
+          <label class="btn small">📷 Upload billede
             <input id="profileFile" type="file" accept="image/*" hidden>
           </label>
-          <button id="profileRemove" class="btn small ghost danger" type="button" hidden>Remove</button>
+          <button id="profileRemove" class="btn small ghost danger" type="button" hidden>Fjern</button>
         </div>
       </div>
-      <label>Your name
+      <label>Dit navn
         <input id="nameInput" required maxlength="40" autocomplete="given-name">
       </label>
-      <button id="importOpenBtn" class="btn admin-tool" type="button" hidden>📋 Import old ratings</button>
+      <button id="importOpenBtn" class="btn admin-tool" type="button" hidden>📋 Importér gamle bedømmelser</button>
       <div class="dialog-actions">
-        <button id="signOutBtn" class="btn ghost danger" type="button" hidden>Sign out</button>
-        <button class="btn primary" value="ok">Save</button>
+        <button id="signOutBtn" class="btn ghost danger" type="button" hidden>Log ud</button>
+        <button class="btn primary" value="ok">Gem</button>
       </div>
     </form>
   </dialog>
@@ -160,10 +160,10 @@
   <!-- "Are you sure?" -->
   <dialog id="confirmDialog" class="confirm">
     <form method="dialog" class="dialog-body">
-      <h2 id="confirmTitle">Are you sure?</h2>
+      <h2 id="confirmTitle">Er du sikker?</h2>
       <p id="confirmText" class="muted"></p>
       <div class="dialog-actions">
-        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn ghost" value="cancel">Annullér</button>
         <button id="confirmOk" class="btn primary" value="ok">OK</button>
       </div>
     </form>
@@ -174,16 +174,16 @@
     <div class="dialog-body">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="dialog-head">
-        <h2>Import old ratings</h2>
-        <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
+        <h2>Importér gamle bedømmelser</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Luk">✕</button>
       </div>
-      <p class="muted">Paste books the club rated before the app. Start each book with <b>Author - Title</b> (optionally <b>Valgt af:</b> and <b>Sted:</b> lines), then each member's name with <b>Indhold</b> (Content) and <b>Skriveri</b> (Language). Totals are worked out by the app, so those lines are skipped. You can paste several books at once.</p>
+      <p class="muted">Indsæt bøger, klubben har bedømt før appen. Start hver bog med <b>Forfatter - Titel</b> (evt. linjer med <b>Valgt af:</b> og <b>Sted:</b>), og derefter hvert medlems navn med <b>Indhold</b> og <b>Skriveri</b>. Appen regner selv totalerne ud, så de linjer springes over. Du kan indsætte flere bøger på én gang.</p>
       <textarea id="importText" rows="9" spellcheck="false" placeholder="Khaled Hosseini - Drageløberen:&#10;&#10;Jasp:&#10;Indhold: 4.3&#10;Skriveri: 4.8&#10;&#10;Boas:&#10;Indhold: 4.7&#10;Skriveri: 4.7"></textarea>
       <div id="importPreview" class="import-preview"></div>
-      <p class="muted small">Imported books are saved with rating closed. When a friend creates an account with the same name (for example "Jasp"), their scores are linked to them automatically.</p>
+      <p class="muted small">Importerede bøger gemmes med lukket bedømmelse. Når en ven opretter en profil med samme navn (fx "Jasp"), bliver deres point automatisk koblet til dem.</p>
       <div class="dialog-actions">
-        <button class="btn ghost" type="button" data-close>Cancel</button>
-        <button id="importBtn" class="btn primary" type="button" disabled>Import</button>
+        <button class="btn ghost" type="button" data-close>Annullér</button>
+        <button id="importBtn" class="btn primary" type="button" disabled>Importér</button>
       </div>
     </div>
   </dialog>
@@ -198,9 +198,9 @@
     <div class="dialog-body">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="dialog-head">
-        <button id="backToSearch" class="icon-btn" type="button" aria-label="Back to search" hidden>‹</button>
-        <h2 id="editTitle">Add a book</h2>
-        <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
+        <button id="backToSearch" class="icon-btn" type="button" aria-label="Tilbage til søgning" hidden>‹</button>
+        <h2 id="editTitle">Tilføj en bog</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Luk">✕</button>
       </div>
 
       <!-- Step 1: find the book -->
@@ -208,12 +208,12 @@
         <form id="searchForm" class="find-box" role="search">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           <input id="searchInput" type="search" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
-                 placeholder="Title, author or ISBN" aria-label="Search for a book" aria-controls="searchResults">
+                 placeholder="Titel, forfatter eller ISBN" aria-label="Søg efter en bog" aria-controls="searchResults">
           <span id="searchSpinner" class="spinner" hidden></span>
         </form>
-        <div id="searchResults" class="results" role="listbox" aria-label="Suggestions"></div>
-        <p id="searchHint" class="find-hint">Start typing and suggestions appear. Danish books, e-books and audiobooks included.</p>
-        <button id="manualBtn" class="manual-link" type="button">Can't find it? <b>Add it yourself →</b></button>
+        <div id="searchResults" class="results" role="listbox" aria-label="Forslag"></div>
+        <p id="searchHint" class="find-hint">Begynd at skrive, så kommer der forslag. Med danske bøger, e-bøger og lydbøger.</p>
+        <button id="manualBtn" class="manual-link" type="button">Kan du ikke finde den? <b>Tilføj den selv →</b></button>
       </section>
 
       <!-- Step 2: check the details -->
@@ -223,45 +223,45 @@
             <div id="coverPreview" class="cover big"></div>
           </div>
           <div class="book-head-fields">
-            <input id="fTitle" class="title-input" required maxlength="200" placeholder="Title *" aria-label="Title">
-            <input id="fAuthor" maxlength="200" placeholder="Author" aria-label="Author">
+            <input id="fTitle" class="title-input" required maxlength="200" placeholder="Titel *" aria-label="Titel">
+            <input id="fAuthor" maxlength="200" placeholder="Forfatter" aria-label="Forfatter">
             <div class="cover-actions">
-              <label class="btn small">📷 Photo<input id="coverFile" type="file" accept="image/*" hidden></label>
-              <button id="coverRemove" class="btn small ghost" type="button">Remove</button>
+              <label class="btn small">📷 Foto<input id="coverFile" type="file" accept="image/*" hidden></label>
+              <button id="coverRemove" class="btn small ghost" type="button">Fjern</button>
             </div>
           </div>
         </div>
 
         <div class="field-grid">
-          <label>Selected by
-            <select id="fSelectedBy" aria-label="Member who selected the book"></select>
-            <input id="fSelectedByOther" maxlength="40" placeholder="Name" hidden>
+          <label>Valgt af
+            <select id="fSelectedBy" aria-label="Medlemmet der valgte bogen"></select>
+            <input id="fSelectedByOther" maxlength="40" placeholder="Navn" hidden>
           </label>
-          <label>Review location
-            <input id="fLocation" maxlength="120" placeholder="e.g. Café Paludan" list="locationList">
+          <label>Sted for anmeldelse
+            <input id="fLocation" maxlength="120" placeholder="fx Café Paludan" list="locationList">
             <datalist id="locationList"></datalist>
           </label>
-          <label>We read it
+          <label>Vi læste den
             <input id="fReadOn" type="date">
           </label>
-          <label>Published
-            <input id="fYear" type="number" min="0" max="2100" inputmode="numeric" placeholder="Year">
+          <label>Udgivet
+            <input id="fYear" type="number" min="0" max="2100" inputmode="numeric" placeholder="År">
           </label>
         </div>
 
         <label id="startRatingRow" class="check">
           <input id="fStartRating" type="checkbox" checked>
-          <span><strong>Start rating now</strong><small>Everyone can give their score until the admin closes the rating.</small></span>
+          <span><strong>Start bedømmelse nu</strong><small>Alle kan give point, indtil admin lukker bedømmelsen.</small></span>
         </label>
 
         <details class="about">
-          <summary>About the book</summary>
-          <textarea id="fDescription" rows="4" maxlength="4000" placeholder="Optional"></textarea>
+          <summary>Om bogen</summary>
+          <textarea id="fDescription" rows="4" maxlength="4000" placeholder="Valgfrit"></textarea>
         </details>
 
         <div class="dialog-actions sticky-actions">
-          <button class="btn ghost" type="button" data-close>Cancel</button>
-          <button id="saveBook" class="btn primary" type="submit">Save book</button>
+          <button class="btn ghost" type="button" data-close>Annullér</button>
+          <button id="saveBook" class="btn primary" type="submit">Gem bog</button>
         </div>
       </form>
     </div>
@@ -269,7 +269,7 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="config.js?v=202611070046"></script>
-  <script src="app.js?v=202611070046"></script>
+  <script src="config.js?v=202611070055"></script>
+  <script src="app.js?v=202611070055"></script>
 </body>
 </html>
