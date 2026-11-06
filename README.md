@@ -4,7 +4,7 @@ An app for our book club: keep track of the books we've read and give each one
 a score from 1,0 to 5,0 (with one decimal, like 4,2) for **Language** and **Content**. Every member gives their
 own score, and the app shows the club's average.
 
-- Add books by **searching the internet**, Danish books included (Apple Books' Danish store, Open Library and Google Books), or by typing them in
+- Add books by **searching the internet**, Danish books included (Apple Books' Danish e-books and audiobooks, Open Library and Google Books) with suggestions as you type, or by typing them in
 - Every new book starts a **rating round**: all members give their score until the admin closes it, and then the score is final
 - A **Statistics** page with the top rated books, best language, best content, most divided opinions and most active readers
 - Add a **picture** of the book: the cover from the search, or a photo from your phone

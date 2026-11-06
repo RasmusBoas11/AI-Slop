@@ -190,67 +190,73 @@
     <div id="bookBody" class="dialog-body"></div>
   </dialog>
 
-  <!-- Add / edit a book -->
-  <dialog id="editDialog" class="wide">
+  <!-- Add / edit a book: step 1 find it, step 2 check the details -->
+  <dialog id="editDialog" class="wide book-editor">
     <div class="dialog-body">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="dialog-head">
+        <button id="backToSearch" class="icon-btn" type="button" aria-label="Back to search" hidden>‹</button>
         <h2 id="editTitle">Add a book</h2>
         <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
       </div>
 
-      <section id="searchSection">
-        <form id="searchForm" class="search-row">
-          <input id="searchInput" type="search" placeholder="Title, author or ISBN (Danish books too)" aria-label="Search the internet for a book">
-          <button class="btn" type="submit">Search</button>
+      <!-- Step 1: find the book -->
+      <section id="stepFind" class="step-find">
+        <form id="searchForm" class="find-box" role="search">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="searchInput" type="search" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
+                 placeholder="Title, author or ISBN" aria-label="Search for a book" aria-controls="searchResults">
+          <span id="searchSpinner" class="spinner" hidden></span>
         </form>
-        <div id="searchResults" class="results"></div>
-        <p class="divider"><span>or fill in the details yourself</span></p>
+        <div id="searchResults" class="results" role="listbox" aria-label="Suggestions"></div>
+        <p id="searchHint" class="find-hint">Start typing and suggestions appear. Danish books, e-books and audiobooks included.</p>
+        <button id="manualBtn" class="manual-link" type="button">Can't find it? <b>Add it yourself →</b></button>
       </section>
 
-      <form id="editForm" class="edit-form">
-        <div class="cover-edit">
-          <div id="coverPreview" class="cover big"></div>
-          <label class="btn small">
-            📷 Add photo
-            <input id="coverFile" type="file" accept="image/*" hidden>
-          </label>
-          <button id="coverRemove" class="btn small ghost" type="button">Remove</button>
+      <!-- Step 2: check the details -->
+      <form id="editForm" class="edit-form" hidden>
+        <div class="book-head">
+          <div class="cover-edit">
+            <div id="coverPreview" class="cover big"></div>
+          </div>
+          <div class="book-head-fields">
+            <input id="fTitle" class="title-input" required maxlength="200" placeholder="Title *" aria-label="Title">
+            <input id="fAuthor" maxlength="200" placeholder="Author" aria-label="Author">
+            <div class="cover-actions">
+              <label class="btn small">📷 Photo<input id="coverFile" type="file" accept="image/*" hidden></label>
+              <button id="coverRemove" class="btn small ghost" type="button">Remove</button>
+            </div>
+          </div>
         </div>
-        <div class="fields">
-          <label>Title *
-            <input id="fTitle" required maxlength="200">
+
+        <div class="field-grid">
+          <label>Selected by
+            <select id="fSelectedBy" aria-label="Member who selected the book"></select>
+            <input id="fSelectedByOther" maxlength="40" placeholder="Name" hidden>
           </label>
-          <label>Author
-            <input id="fAuthor" maxlength="200">
+          <label>Review location
+            <input id="fLocation" maxlength="120" placeholder="e.g. Café Paludan" list="locationList">
+            <datalist id="locationList"></datalist>
           </label>
-          <div class="two">
-            <label>Published
-              <input id="fYear" type="number" min="0" max="2100" inputmode="numeric" placeholder="Year">
-            </label>
-            <label>We read it
-              <input id="fReadOn" type="date">
-            </label>
-          </div>
-          <div class="two">
-            <label>Selected by
-              <select id="fSelectedBy" aria-label="Member who selected the book"></select>
-              <input id="fSelectedByOther" maxlength="40" placeholder="Name" hidden>
-            </label>
-            <label>Review location
-              <input id="fLocation" maxlength="120" placeholder="e.g. Café Paludan" list="locationList">
-              <datalist id="locationList"></datalist>
-            </label>
-          </div>
-          <label>About the book
-            <textarea id="fDescription" rows="3" maxlength="4000" placeholder="Optional"></textarea>
+          <label>We read it
+            <input id="fReadOn" type="date">
           </label>
-          <label id="startRatingRow" class="check">
-            <input id="fStartRating" type="checkbox" checked>
-            <span><strong>Start rating now</strong><small>Everyone can give their score until the admin closes the rating.</small></span>
+          <label>Published
+            <input id="fYear" type="number" min="0" max="2100" inputmode="numeric" placeholder="Year">
           </label>
         </div>
-        <div class="dialog-actions">
+
+        <label id="startRatingRow" class="check">
+          <input id="fStartRating" type="checkbox" checked>
+          <span><strong>Start rating now</strong><small>Everyone can give their score until the admin closes the rating.</small></span>
+        </label>
+
+        <details class="about">
+          <summary>About the book</summary>
+          <textarea id="fDescription" rows="4" maxlength="4000" placeholder="Optional"></textarea>
+        </details>
+
+        <div class="dialog-actions sticky-actions">
           <button class="btn ghost" type="button" data-close>Cancel</button>
           <button id="saveBook" class="btn primary" type="submit">Save book</button>
         </div>

@@ -698,11 +698,13 @@
   function openEdit(book) {
     state.editingId = book ? book.id : null;
     $('#editTitle').textContent = book ? 'Edit book' : 'Add a book';
-    $('#searchSection').hidden = Boolean(book);
+    showStep(book ? 'details' : 'find', { editing: Boolean(book) });
     $('#startRatingRow').hidden = Boolean(book);
     $('#fStartRating').checked = true;
     $('#searchResults').innerHTML = '';
     $('#searchInput').value = '';
+    $('#searchHint').hidden = false;
+    pickToken++;
     $('#fTitle').value = book?.title || '';
     $('#fAuthor').value = book?.author || '';
     $('#fYear').value = book?.year || '';
@@ -714,7 +716,18 @@
       .sort().map((l) => `<option value="${esc(l)}"></option>`).join('');
     setCover(book?.cover || '');
     $('#editDialog').showModal();
-    (book ? $('#fTitle') : $('#searchInput')).focus();
+    $('#editDialog').scrollTop = 0;
+    if (!book) $('#searchInput').focus();
+  }
+
+  // Step 1 "find" (search with live suggestions) or step 2 "details" (the form)
+  function showStep(step, { editing = false } = {}) {
+    const find = step === 'find';
+    $('#stepFind').hidden = !find;
+    $('#editForm').hidden = find;
+    $('#backToSearch').hidden = find || editing;
+    $('#editDialog').classList.toggle('finding', find);
+    $('#editDialog').scrollTop = 0;
   }
 
   // Shrink a photo before saving so it loads fast and fits in the database.
@@ -740,6 +753,7 @@
   // Apple Books (Danish store) finds Danish titles with covers; Open Library and
   // Google Books add international titles and original publishing years.
   let lastResults = [];
+  let pickToken = 0; // ignores late cover lookups after you pick another book
 
   // Apple's Danish store also sells English books, so guess the language from the text
   function looksDanish(text) {
@@ -751,100 +765,110 @@
     return /[æøå]/i.test(text) ? d >= e : d > e;
   }
 
-  const getJson = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  const getJson = (url, signal) => fetch(url, { signal }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  const norm = (str) => String(str || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9æøå ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleanTitle = (t) => String(t || '').replace(/\s*\(in [A-Z][a-z]+\)\s*$/, '')
+    .replace(/\s*\((uforkortet|unabridged|lydbog|audiobook)\)\s*$/i, '').replace(/\s*[:\-–]\s*$/, '').trim();
 
-  async function searchOnline(q) {
+  // partial = the user is still typing the last word (live suggestions)
+  async function searchOnline(q, { partial = false, signal } = {}) {
     const isbn = q.replace(/[-\s]/g, '');
     const isIsbn = /^(97[89])?\d{9}[\dXx]$/.test(isbn);
-    const enc = encodeURIComponent(isIsbn ? isbn : q);
-    const gKey = cfg.googleBooksApiKey ? `&key=${encodeURIComponent(cfg.googleBooksApiKey)}` : '';
+    const words = norm(q).split(' ').filter(Boolean);
+    const prefix = partial && !isIsbn && !/\s$/.test(q) ? words[words.length - 1] : '';
+    const whole = prefix ? words.slice(0, -1) : words;         // finished words
+    const base = whole.join(' ');
+    const enc = (t) => encodeURIComponent(t);
+    const gKey = cfg.googleBooksApiKey ? `&key=${enc(cfg.googleBooksApiKey)}` : '';
+    const apple = (term, media) => getJson(`https://itunes.apple.com/search?term=${enc(term)}&media=${media}&country=dk&limit=20`, signal);
 
-    const [apple, ol, gb] = await Promise.allSettled([
-      isIsbn ? Promise.resolve({ results: [] })
-        : getJson(`https://itunes.apple.com/search?term=${enc}&media=ebook&country=dk&limit=15`),
-      getJson(`https://openlibrary.org/search.json?${isIsbn ? 'isbn' : 'q'}=${enc}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,language`),
-      getJson(`https://www.googleapis.com/books/v1/volumes?q=${isIsbn ? 'isbn:' : ''}${enc}&maxResults=10&printType=books&country=DK${gKey}`),
-    ]);
+    const jobs = isIsbn ? [
+      getJson(`https://openlibrary.org/search.json?isbn=${isbn}&limit=5&fields=title,author_name,first_publish_year,cover_i,language`, signal).then((d) => ({ ol: d })),
+      getJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=5${gKey}`, signal).then((d) => ({ gb: d })),
+    ] : [
+      apple(q, 'ebook').then((d) => ({ apple: d })),
+      apple(q, 'audiobook').then((d) => ({ apple: d, audio: true })),
+      // Apple can't match half-typed words, so also search the finished words and filter below
+      ...(prefix && base ? [apple(base, 'ebook').then((d) => ({ apple: d })), apple(base, 'audiobook').then((d) => ({ apple: d, audio: true }))] : []),
+      getJson(`https://openlibrary.org/search.json?q=${enc(prefix && !base ? `title:${prefix}*` : (base || q))}&limit=15&fields=title,author_name,first_publish_year,cover_i,language`, signal).then((d) => ({ ol: d })),
+      getJson(`https://www.googleapis.com/books/v1/volumes?q=${enc(base || q)}&maxResults=15&printType=books&country=DK${gKey}`, signal).then((d) => ({ gb: d })),
+    ];
+    const settled = await Promise.allSettled(jobs);
+    if (signal && signal.aborted) throw new DOMException('aborted', 'AbortError');
+    if (settled.every((x) => x.status === 'rejected')) throw new Error('Search is not reachable right now. Check your internet connection.');
 
-    const fromApple = apple.status === 'fulfilled' ? (apple.value.results || [])
-      .filter((x) => !/\b(summary|study guide|analysis|resumé)\b/i.test(x.trackName || ''))
-      .map((x) => {
-        const description = plainText(x.description);
-        return {
-          title: x.trackName,
-          author: x.artistName || '',
-          year: null, // Apple gives the e-book's date, not the first edition; Open Library fills this in when it can
-          cover: (x.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, '/600x900bb.'),
-          description,
-          danish: looksDanish(`${x.trackName} ${description}`),
-          source: 'Apple Books',
-        };
-      }) : [];
-
-    const fromOL = ol.status === 'fulfilled' ? (ol.value.docs || []).map((d) => ({
-      title: d.title,
-      author: (d.author_name || []).slice(0, 2).join(', '),
-      year: d.first_publish_year || null,
-      cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : '',
-      description: '',
-      danish: (d.language || [])[0] === 'dan',
-      source: 'Open Library',
-    })) : [];
-
-    const fromGB = gb.status === 'fulfilled' ? (gb.value.items || []).map((it) => {
-      const v = it.volumeInfo || {};
-      const thumb = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || '';
-      return {
-        title: v.subtitle ? `${v.title}: ${v.subtitle}` : v.title,
-        author: (v.authors || []).slice(0, 2).join(', '),
-        year: v.publishedDate ? parseInt(v.publishedDate, 10) || null : null,
-        cover: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') + '&fife=w600' : '',
-        description: plainText(v.description),
-        danish: v.language === 'da',
-        source: 'Google Books',
-      };
-    }) : [];
-
-    if ([apple, ol, gb].every((x) => x.status === 'rejected')) {
-      throw new Error('Search is not reachable right now. Check your internet connection.');
-    }
-
-    // Merge: same title + first author counts as one book; keep the best cover,
-    // the earliest year and any description. Danish results first.
-    const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9æøå]/g, '');
-    const map = new Map();
-    const order = [];
-    const lists = [fromApple, fromGB, fromOL];
-    const longest = Math.max(...lists.map((l) => l.length));
-    for (let i = 0; i < longest; i++) {
-      for (const list of lists) {
-        const r = list[i];
-        if (!r || !r.title) continue;
-        const key = norm(r.title.split(':')[0]) + '|' + norm((r.author.split(',')[0] || '').split(' ').pop());
-        const prev = map.get(key);
-        if (!prev) { map.set(key, { ...r }); order.push(key); continue; }
-        if (!prev.cover && r.cover) prev.cover = r.cover;
-        if (!prev.description && r.description) prev.description = r.description;
-        if (r.year && (!prev.year || r.year < prev.year)) prev.year = r.year;
-        prev.danish = prev.danish || r.danish;
+    const all = [];
+    settled.filter((x) => x.status === 'fulfilled').forEach(({ value }) => {
+      if (value.apple) {
+        (value.apple.results || []).forEach((x) => {
+          const title = cleanTitle(value.audio ? x.collectionName : x.trackName);
+          if (!title || /\b(summary|study guide|analysis|resumé)\b/i.test(title)) return;
+          const description = plainText(x.description);
+          all.push({ title, author: x.artistName || '', year: null,
+            cover: (x.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, value.audio ? '/600x600bb.' : '/600x900bb.'),
+            description, danish: looksDanish(`${title} ${description}`), source: value.audio ? 'Apple (audiobook)' : 'Apple Books' });
+        });
       }
-    }
-    const out = order.map((k) => map.get(k));
-    // Books with a cover first, then Danish ones, keeping the search order otherwise
-    return out.map((r, i) => ({ r, i }))
-      .sort((a, b) => (!!b.r.cover - !!a.r.cover) || (b.r.danish - a.r.danish) || a.i - b.i)
-      .map((x) => x.r).slice(0, 20);
+      if (value.ol) {
+        (value.ol.docs || []).forEach((d) => all.push({ title: cleanTitle(d.title), author: (d.author_name || []).slice(0, 2).join(', '),
+          year: d.first_publish_year || null, cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : '',
+          description: '', danish: (d.language || [])[0] === 'dan', source: 'Open Library' }));
+      }
+      if (value.gb) {
+        (value.gb.items || []).forEach((it) => {
+          const v = it.volumeInfo || {};
+          const thumb = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || '';
+          all.push({ title: cleanTitle(v.subtitle ? `${v.title}: ${v.subtitle}` : v.title), author: (v.authors || []).slice(0, 2).join(', '),
+            year: v.publishedDate ? parseInt(v.publishedDate, 10) || null : null,
+            cover: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') + '&fife=w600' : '',
+            description: plainText(v.description), danish: v.language === 'da', source: 'Google Books' });
+        });
+      }
+    });
+
+    // Every finished word must appear, and the half-typed word must start a word, in title or author
+    const matches = (r) => {
+      if (isIsbn) return true;
+      const hay = ' ' + norm(`${r.title} ${r.author}`) + ' ';
+      return whole.every((w) => hay.includes(w)) && (!prefix || hay.includes(' ' + prefix));
+    };
+
+    // Merge the same book from different sources: best cover, earliest year, any description
+    const map = new Map();
+    all.filter((r) => r.title && matches(r)).forEach((r, i) => {
+      const key = norm(r.title.split(':')[0]).replace(/ /g, '') + '|' + norm((r.author.split(',')[0] || '').split(' ').pop());
+      const prev = map.get(key);
+      if (!prev) { map.set(key, { ...r, i }); return; }
+      if (!prev.cover && r.cover) prev.cover = r.cover;
+      if (!prev.description && r.description) prev.description = r.description;
+      if (r.year && (!prev.year || r.year < prev.year)) prev.year = r.year;
+      prev.danish = prev.danish || r.danish;
+    });
+    // Titles that start with what you typed first, then books with a cover, then Danish
+    const qn = norm(q);
+    const score = (r) => (norm(r.title).startsWith(qn) ? 4 : 0) + (r.cover ? 2 : 0) + (r.danish ? 1 : 0);
+    // Drop author-less copies of a book that is already listed with its author
+    const withAuthor = new Set([...map.values()].filter((r) => r.author).map((r) => norm(r.title).replace(/ /g, '')));
+    const list = [...map.values()].filter((r) => r.author || !withAuthor.has(norm(r.title).replace(/ /g, '')));
+    return list.sort((a, b) => score(b) - score(a) || a.i - b.i).slice(0, 20);
+  }
+
+  // Find a cover (and description/year) for a picked book that has none
+  async function findCoverFor(title, author) {
+    const hits = await searchOnline(`${title} ${author || ''}`.trim());
+    const t = norm(title);
+    return hits.find((h) => h.cover && norm(h.title).startsWith(t)) || null;
   }
 
   function renderResults(results) {
     lastResults = results;
     $('#searchResults').innerHTML = results.length
-      ? results.map((r, i) => `<button class="result" type="button" data-result="${i}" style="--i:${Math.min(i, 10)}">
+      ? results.map((r, i) => `<button class="result" type="button" role="option" data-result="${i}" style="--i:${Math.min(i, 10)}">
           ${coverHtml(r)}
-          <div><strong>${esc(r.title)}</strong><small>${esc([r.author, r.year].filter(Boolean).join(' · '))}</small></div>
-          <span class="src">${r.danish ? '<span class="flag" title="Danish">🇩🇰</span>' : ''}${esc(r.source)}</span>
+          <span class="result-text"><strong>${esc(r.title)}</strong><small>${esc([r.author, r.year].filter(Boolean).join(' · '))}</small></span>
+          ${r.danish ? '<span class="flag" title="Danish">🇩🇰</span>' : ''}
         </button>`).join('')
-      : '<p class="muted">No books found. Try other words, or fill in the details below.</p>';
+      : '<p class="find-empty">No matches yet. Keep typing, try the author\'s name, or add it yourself below.</p>';
   }
 
   // ---------- Member name / account ----------
@@ -1281,15 +1305,48 @@
       }
     });
 
-    // Search online
-    $('#searchForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const q = $('#searchInput').value.trim();
-      if (!q) return;
-      $('#searchResults').innerHTML = '<p class="loading"><span class="spinner"></span>Searching the internet…</p>';
-      try { renderResults(await searchOnline(q)); }
-      catch (err) { $('#searchResults').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
+    // Search online: suggestions while typing (debounced), full search on Enter
+    let searchTimer = null;
+    let searchCtrl = null;
+    const searchCache = new Map();
+    async function runSearch(raw, partial) {
+      const q = raw.replace(/^\s+/, '');
+      if (searchCtrl) searchCtrl.abort();
+      if (q.trim().length < 2) { $('#searchResults').innerHTML = ''; $('#searchHint').hidden = false; $('#searchSpinner').hidden = true; return; }
+      $('#searchHint').hidden = true;
+      const key = (partial ? 'p:' : 'f:') + q.toLowerCase();
+      if (searchCache.has(key)) { renderResults(searchCache.get(key)); return; }
+      searchCtrl = new AbortController();
+      const ctrl = searchCtrl;
+      $('#searchSpinner').hidden = false;
+      try {
+        const results = await searchOnline(q, { partial, signal: ctrl.signal });
+        searchCache.set(key, results);
+        if (ctrl === searchCtrl) renderResults(results);
+      } catch (err) {
+        if (err.name !== 'AbortError' && ctrl === searchCtrl) $('#searchResults').innerHTML = `<p class="find-empty">${esc(err.message)}</p>`;
+      } finally {
+        if (ctrl === searchCtrl) $('#searchSpinner').hidden = true;
+      }
+    }
+    $('#searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      const v = e.target.value;
+      searchTimer = setTimeout(() => runSearch(v, true), 300);
     });
+    $('#searchForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      clearTimeout(searchTimer);
+      $('#searchInput').blur(); // hide the phone keyboard so the results are visible
+      runSearch($('#searchInput').value, false);
+    });
+    $('#manualBtn').addEventListener('click', () => {
+      const typed = $('#searchInput').value.trim();
+      if (typed && !$('#fTitle').value) $('#fTitle').value = typed;
+      showStep('details');
+      $('#fTitle').focus();
+    });
+    $('#backToSearch').addEventListener('click', () => { showStep('find'); $('#searchInput').focus(); });
     $('#fSelectedBy').addEventListener('change', (e) => {
       const other = e.target.value === '__other';
       $('#fSelectedByOther').hidden = !other;
@@ -1304,8 +1361,17 @@
       $('#fYear').value = r.year || '';
       $('#fDescription').value = r.description || '';
       setCover(r.cover);
-      $('#searchResults').innerHTML = `<p class="muted">✓ Filled in from ${esc(r.source)}. Check the details, add when you read it, then save.</p>`;
-      $('#fReadOn').focus();
+      showStep('details');
+      // No cover, description or year? Look them up in the background.
+      if (!r.cover || !r.description || !r.year) {
+        const token = ++pickToken;
+        findCoverFor(r.title, r.author).then((hit) => {
+          if (!hit || token !== pickToken) return;
+          if (!state.edit.cover && hit.cover) setCover(hit.cover);
+          if (!$('#fDescription').value && hit.description) $('#fDescription').value = hit.description;
+          if (!$('#fYear').value && hit.year) $('#fYear').value = hit.year;
+        }).catch(() => {});
+      }
     });
 
     // Cover photo
