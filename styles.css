@@ -959,3 +959,110 @@ dialog.confirm .dialog-actions .btn {
 dialog.confirm .dialog-actions .btn + .btn { border-left: .5px solid var(--border); font-weight: 600; }
 dialog.confirm .btn.danger-fill { color: var(--danger); background: none; }
 .cover-title { overflow-wrap: anywhere; hyphens: auto; }
+
+/* ============================================================
+   Polish pass (frontend-design)
+   One display face (Bricolage Grotesque) for the club name,
+   book titles and scores; SF for everything you read and tap.
+   Solid colour instead of gradients, sentence-case labels,
+   motion only where you act.
+   ============================================================ */
+:root {
+  --font-display: "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --lilac: #e9e8fb;
+  --marigold: #f2a93b;
+  --star: var(--marigold);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --lilac: #26254a; --marigold: #f5b14a; }
+}
+body { background: var(--bg); }
+
+/* Quiet the decoration: no slide-in on every card, no gradient text, no capital-letter labels */
+.card, .stat, .stats-card, .open-section, .open-card, .hero, .page-head, .result, .rank-row, .empty,
+.import-book, .auth-card { animation: none !important; }
+.stat .k, .avg-box .label, .final-main .label, .st-head, .field-grid label, .book-editor label {
+  text-transform: none !important; letter-spacing: 0 !important;
+}
+.stat .k { font-size: .85rem; font-weight: 500; }
+.avg-box .label, .final-main .label { font-size: .82rem; font-weight: 500; }
+.st-head { font-size: .78rem; font-weight: 600; }
+
+/* Display type */
+.hero-title, .page-head h1, .section-head h2, .stats-card h2, .now-title, .now-score,
+.detail-info h2, .final-num, .avg-box .big-num, .stat .v, .rank-score, .auth-card h1 {
+  font-family: var(--font-display); font-optical-sizing: auto; font-feature-settings: "tnum" 1;
+}
+.hero-title {
+  background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--text);
+  font-weight: 760; letter-spacing: -.035em; line-height: 1;
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
+}
+.hero { padding: 22px 0 18px; }
+.hero-meta { display: block; margin: 8px 0 0; padding: 0; border: 0; background: none; font-weight: 400; font-size: 15px; color: var(--muted); }
+.section-head h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.stats-card h2 { font-size: 20px; font-weight: 700; letter-spacing: -.015em; }
+.page-head h1 { font-weight: 760; letter-spacing: -.035em; }
+.detail-info h2 { font-weight: 700; letter-spacing: -.025em; line-height: 1.08; }
+
+/* "Nu læser vi": the one memorable element */
+.now { display: grid; gap: 12px; margin: 4px 0 30px; }
+.now-card {
+  display: flex; gap: 18px; align-items: flex-end; width: 100%; text-align: left; cursor: pointer;
+  padding: 18px; border: 0; border-radius: 22px; background: var(--surface);
+  box-shadow: 0 1px 0 rgba(0,0,0,.02), 0 12px 32px -18px rgba(40, 38, 120, .35);
+}
+.now-card.is-open { background: linear-gradient(var(--lilac), var(--lilac)) top / 100% 46% no-repeat, var(--surface); }
+.now-cover { width: 108px !important; flex-shrink: 0; border-radius: 6px; font-size: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,.08), 0 14px 28px -10px rgba(20, 18, 70, .45); transform: rotate(-2deg); }
+.now-body { display: grid; gap: 3px; min-width: 0; padding-bottom: 2px; }
+.now-label { font-size: 14px; font-weight: 600; color: var(--accent); }
+.now-title { font-size: 28px; font-weight: 720; letter-spacing: -.03em; line-height: 1.04; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.now-author { font-size: 15px; color: var(--muted); }
+.now-picked { font-size: 13px; color: var(--muted); }
+.now-score { font-size: 56px; font-weight: 800; line-height: .95; letter-spacing: -.04em; color: var(--accent); margin-top: 6px; }
+.now-progress { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.faces { display: inline-flex; }
+.faces .avatar { width: 24px; height: 24px; font-size: .6rem; box-shadow: 0 0 0 2px var(--surface); }
+.faces .avatar + .avatar { margin-left: -7px; }
+.now-cta { width: 100%; min-height: 52px; border-radius: 14px; font-size: 17px; }
+.now-cta.done { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+
+/* Solid colour instead of gradient washes */
+.final-card, .avg-box.main, .stat.accent, .final-pill { background: var(--accent) !important; }
+.final-num { font-size: 64px; font-weight: 800; letter-spacing: -.045em; }
+.final-main .stars { background: linear-gradient(90deg, var(--marigold) calc(var(--v) / 5 * 100%), rgba(255,255,255,.28) 0); -webkit-background-clip: text; background-clip: text; }
+.open-section { background: none !important; border: 0 !important; padding: 0 !important; }
+.open-section .section-head h2 { font-size: 17px; font-weight: 600; font-family: var(--font-sans); letter-spacing: -.01em; }
+.track i { background: var(--accent); }
+.track i.alt { background: var(--marigold); }
+
+/* Shelf: let the covers carry it; scores as quiet text instead of chips */
+.pills { gap: 10px; }
+.pill { border: 0; background: none; padding: 0; font-size: 13px; color: var(--text); }
+.pill .lbl { color: var(--muted); }
+.final-pill { color: #fff; }
+.card .cover { border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 22px -12px rgba(20, 18, 70, .4); }
+.card-body h3 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+
+@media (min-width: 601px) {
+  .now { max-width: 640px; }
+  .now-cover { width: 132px !important; }
+  .now-title { font-size: 34px; }
+}
+@media (max-width: 600px) {
+  .hero { padding: 4px 0 16px; }
+  .hero-title { font-size: 34px; }
+  .hero-meta { font-size: 15px; }
+}
+/* Break long words only where Danish hyphenation allows, never mid-syllable */
+.now-title, .detail-info h2, .card h3 { overflow-wrap: break-word; hyphens: auto; -webkit-hyphens: auto; }
+.now-title.long { font-size: 24px; }
+.now-title.longer { font-size: 21px; }
+.cover-title { overflow-wrap: break-word; word-break: normal; hyphens: manual; -webkit-hyphens: manual; }
+.now-cover .cover-title { line-height: 1.2; }
+@media (min-width: 601px) { .now-title.long { font-size: 30px; } .now-title.longer { font-size: 26px; } }
+.cover-title { overflow-wrap: anywhere; }
+.cover-title { width: 100%; text-align: center; }
+.now-cover { padding: 12px 10px !important; }

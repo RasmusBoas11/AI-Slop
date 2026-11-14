@@ -302,7 +302,10 @@
   // ---------- Rendering: books page ----------
   function coverHtml(book, cls = '') {
     const style = `style="--h:${hue(book.title)}"`;
-    const fallback = `<span class="cover-title">${esc(book.title || 'Intet omslag')}</span>`;
+    // Shrink the text on a placeholder cover so its longest word fits
+    const longest = Math.max(...String(book.title || 'Intet omslag').split(/\s+/).map((w) => w.length));
+    const fit = longest > 9 ? ` style="font-size:${Math.max(0.55, 9 / longest).toFixed(2)}em"` : '';
+    const fallback = `<span class="cover-title"${fit}>${esc(book.title || 'Intet omslag')}</span>`;
     // If a cover link breaks, the image removes itself and the coloured title cover shows instead
     if (book.cover) return `<div class="cover ${cls}" ${style}>${fallback}<img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>`;
     return `<div class="cover ${cls}" ${style}>${fallback}</div>`;
@@ -317,32 +320,70 @@
 
   function renderHero() {
     const name = cfg.clubName || 'Book Club';
-    const rated = state.books.filter((b) => scoresOf(b).count);
     const scores = state.books.reduce((n, b) => n + (b.ratings || []).length, 0);
     $('#heroTitle').textContent = name;
     $('#heroMeta').textContent = state.books.length
-      ? `${plural(state.books.length, 'bog', 'bøger')} · ${plural(scores, 'bedømmelse', 'bedømmelser')} · ${plural(rated.length, 'bog bedømt', 'bøger bedømt')}`
+      ? `Vi har læst ${plural(state.books.length, 'bog', 'bøger')} og givet ${plural(scores, 'bedømmelse', 'bedømmelser')}.`
       : '';
+  }
+
+  // Up to five faces of the members who have scored a book
+  function raterFaces(b) {
+    const rs = (b.ratings || []).slice(0, 5);
+    return rs.length ? `<span class="faces">${rs.map((r) => avatarHtml(r.member, r.user_id)).join('')}</span>` : '';
+  }
+
+  // The front page opens with the book being rated now, or else the last one finished
+  function renderNow() {
+    const byNewest = (a, b) => (b.created_at || '').localeCompare(a.created_at || '');
+    const open = state.books.filter((b) => statusOf(b) === 'open').sort(byNewest);
+    const closed = state.books.filter((b) => statusOf(b) === 'closed' && scoresOf(b).count)
+      .sort((a, b) => (b.rating_closed_at || '').localeCompare(a.rating_closed_at || ''));
+    const el = $('#nowSection');
+    const b = open[0] || closed[0];
+    el.hidden = !b;
+    if (!b) return;
+    const s = scoresOf(b);
+    const mine = (b.ratings || []).find(isMine);
+    const members = Math.max(knownMembers().length, s.count);
+    const isOpen = statusOf(b) === 'open';
+    const progress = isOpen
+      ? (s.count ? `${s.count} af ${members} har givet point` : 'Ingen har givet point endnu')
+      : `Endelig score fra ${plural(s.count, 'medlem', 'medlemmer')}`;
+    el.innerHTML = `
+      <button class="now-card ${isOpen ? 'is-open' : 'is-closed'}" type="button" data-id="${esc(b.id)}">
+        ${coverHtml(b, 'now-cover')}
+        <span class="now-body">
+          <span class="now-label">${isOpen ? 'Nu læser vi' : 'Senest afsluttet'}</span>
+          <span class="now-title${b.title.length > 26 ? ' longer' : b.title.length > 15 ? ' long' : ''}">${esc(b.title)}</span>
+          ${b.author ? `<span class="now-author">${esc(b.author)}</span>` : ''}
+          ${b.selected_by ? `<span class="now-picked">Valgt af ${esc(b.selected_by)}</span>` : ''}
+          ${isOpen ? '' : `<span class="now-score">${fmtAvg(s.overall)}</span>`}
+          <span class="now-progress">${raterFaces(b)}<span>${progress}</span></span>
+        </span>
+      </button>
+      ${isOpen ? `<button class="btn primary now-cta${mine ? ' done' : ''}" type="button" data-open-book="${esc(b.id)}">
+        ${mine ? `Du gav ${fmt(mine.language)} og ${fmt(mine.content)}. Ret din bedømmelse` : 'Giv din bedømmelse'}</button>` : ''}`;
   }
 
   function renderOpenStrip() {
     const open = state.books.filter((b) => statusOf(b) === 'open')
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(1); // the newest one is already shown at the top
     const wrap = $('#openSection');
     wrap.hidden = open.length === 0;
     if (!open.length) return;
-    $('#openCount').textContent = open.length;
-    $('#openList').innerHTML = open.map((b, i) => {
+    $('#openList').innerHTML = open.map((b) => {
       const mine = (b.ratings || []).find(isMine);
       const n = (b.ratings || []).length;
-      return `<button class="open-card${mine ? ' done' : ''}" type="button" data-id="${esc(b.id)}" style="--i:${i}">
+      return `<button class="open-card${mine ? ' done' : ''}" type="button" data-id="${esc(b.id)}">
         ${coverHtml(b, 'mini')}
         <span class="open-info">
           <strong>${esc(b.title)}</strong>
           <small>${esc(b.author || '')}</small>
           <small class="open-progress">${n ? plural(n, 'bedømmelse', 'bedømmelser') + ' indtil nu' : 'Ingen bedømmelser endnu'}</small>
         </span>
-        <span class="open-cta">${mine ? '✓ Bedømt' : 'Bedøm nu'}</span>
+        <span class="open-cta">${mine ? 'Bedømt' : 'Bedøm'}</span>
       </button>`;
     }).join('');
   }
@@ -362,6 +403,7 @@
 
   function renderBooks() {
     renderHero();
+    renderNow();
     renderOpenStrip();
     const q = state.filter.trim().toLowerCase();
     const list = sortBooks(state.books.filter((b) => !q || `${b.title} ${b.author || ''}`.toLowerCase().includes(q)));
@@ -376,7 +418,7 @@
              <span class="pill" title="Skriveri"><span class="lbl">Skriveri</span><span class="star">★</span>${fmtAvg(s.language)}</span>
              <span class="pill" title="Indhold"><span class="lbl">Indhold</span><span class="star">★</span>${fmtAvg(s.content)}</span>
            </div>`;
-      return `<button class="card" type="button" data-id="${esc(b.id)}" style="--i:${Math.min(i, 12)}">
+      return `<button class="card" type="button" data-id="${esc(b.id)}">
           <span class="cover-wrap">${coverHtml(b)}${statusBadge(b)}</span>
           <div class="card-body">
             <h3>${esc(b.title)}</h3>
@@ -453,22 +495,22 @@
       </div>
 
       <section class="stats-card">
-        <h2>🏆 Bedst bedømte bøger</h2>
+        <h2>Bedst bedømte bøger</h2>
         <p class="muted">Gennemsnit af alles point for skriveri og indhold.</p>
         <ol class="rank-list">${by('overall').slice(0, 10).map((x, i) => row(x, i, 'overall')).join('')}</ol>
       </section>
 
       <div class="stats-grid">
         <section class="stats-card">
-          <h2>✍️ Bedste skriveri</h2>
+          <h2>Bedste skriveri</h2>
           <ol class="rank-list compact">${by('language').slice(0, 3).map((x, i) => row(x, i, 'language')).join('')}</ol>
         </section>
         <section class="stats-card">
-          <h2>💡 Bedste indhold</h2>
+          <h2>Bedste indhold</h2>
           <ol class="rank-list compact">${by('content').slice(0, 3).map((x, i) => row(x, i, 'content')).join('')}</ol>
         </section>
         ${divided.length ? `<section class="stats-card">
-          <h2>⚡ Mest delte meninger</h2>
+          <h2>Mest delte meninger</h2>
           <p class="muted">Største forskel mellem højeste og laveste score.</p>
           <ol class="rank-list compact">${divided.map((x, i) => `
             <li><button type="button" class="rank-row" data-id="${esc(x.b.id)}" style="--i:${i}">
@@ -478,14 +520,14 @@
             </button></li>`).join('')}</ol>
         </section>` : ''}
         ${pickers.length ? `<section class="stats-card">
-          <h2>🎯 Bedste bogvælgere</h2>
+          <h2>Bedste bogvælgere</h2>
           <p class="muted">Gennemsnitlig score for de bøger, hvert medlem har valgt.</p>
           <ul class="reader-list">${pickers.map((r) => `
             <li>${avatarHtml(r.name)}<span class="reader-name">${esc(r.name)}<small> · ${plural(r.scores.length, 'bog', 'bøger')}</small></span>
               <span class="track"><i style="--v:${r.avg}"></i></span><b>${fmtAvg(r.avg)}</b></li>`).join('')}</ul>
         </section>` : ''}
         <section class="stats-card">
-          <h2>📚 Mest aktive læsere</h2>
+          <h2>Mest aktive læsere</h2>
           <ul class="reader-list">${readers.map((r) => `
             <li>${avatarHtml(r.name, r.uid)}<span class="reader-name">${esc(r.name)}</span>
               <span class="track"><i style="--v:${(r.n / maxN) * 5}"></i></span><b>${r.n}</b></li>`).join('')}</ul>
@@ -659,8 +701,26 @@
     state.openBookId = id;
     renderBook();
     const d = $('#bookDialog');
-    if (!d.open) d.showModal();
+    const wasOpen = d.open;
+    if (!wasOpen) d.showModal();
     d.scrollTop = 0;
+    if (!wasOpen) countUp($('#bookBody .final-num'));
+  }
+
+  // Count the final score up from 1,0 so the result lands as a moment
+  function countUp(el) {
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const target = Number(el.textContent.replace(',', '.'));
+    if (!target) return;
+    const finalText = el.textContent;
+    const start = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - start) / 700);
+      const eased = 1 - Math.pow(1 - k, 3);
+      el.textContent = k < 1 ? fmt(1 + (target - 1) * eased) : finalText;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   // ---------- Add / edit book ----------
@@ -1256,7 +1316,8 @@
 
     // Open a book from the shelf, the "open for rating" strip or the statistics
     document.addEventListener('click', (e) => {
-      const card = e.target.closest('.card[data-id], .open-card[data-id], .rank-row[data-id]');
+      const card = e.target.closest('.card[data-id], .open-card[data-id], .rank-row[data-id], .now-card[data-id], [data-open-book]');
+      if (card && card.dataset.openBook) { openBook(card.dataset.openBook); return; }
       if (card) { openBook(card.dataset.id); return; }
       if (e.target.closest('[data-action="add"]')) openEdit(null);
       const closer = e.target.closest('[data-close]');
