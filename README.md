@@ -29,6 +29,9 @@ It's plain HTML, CSS and JavaScript with nothing to install or build.
 | `supabase/003_decimal_scores.sql` | Allows scores with one decimal (4,2) |
 | `supabase/004_import_old_ratings.sql` | Lets the admin import old ratings for members without an account (includes 003) |
 | `supabase/005_selected_by_location_profiles.sql` | Adds "Selected by", review location and profile pictures |
+| `supabase/006_notifications.sql` | Stores which phones want notifications |
+| `supabase/functions/notify/index.ts` | Supabase Edge Function that sends the notifications |
+| `sw.js` | Shows notifications on the phone and opens the right book |
 | `manifest.webmanifest`, `icon.svg` | Let the app be installed on a phone |
 
 ## 1. Try it on your computer
@@ -117,6 +120,19 @@ without a key. With a key the app also asks Google specifically for Danish-langu
 6. Put it in `config.js` as `googleBooksApiKey: "AIza..."`.
 
 The Books API is free for normal use (1,000 searches a day).
+
+**Notifications (iPhone and Android)**
+
+Members get a notification when a new book opens for rating and when a rating closes.
+On iPhone this works when the app has been added to the home screen (iOS 16.4 or newer).
+
+1. Run `supabase/006_notifications.sql` in the SQL Editor.
+2. **Edge Functions → Deploy a new function → Via editor**. Name it `notify`, paste
+   `supabase/functions/notify/index.ts`, and click **Deploy**.
+3. **Edge Functions → Secrets**: add `VAPID_PUBLIC_KEY` (the `vapidPublicKey` from `config.js`),
+   `VAPID_PRIVATE_KEY` (from `supabase/vapid-private-key.txt`, which is never uploaded to GitHub)
+   and `VAPID_SUBJECT` = `https://rasmusboas11.github.io/AI-Slop/`.
+4. In the app: tap your name → **Notifikationer → Slå til**, then **Send testnotifikation til mig**.
 
 ## 3. Put it online (free with GitHub Pages)
 

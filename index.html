@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Holtebois Book Club</title>
   <meta name="description" content="Hold styr på de bøger, klubben har læst, og giv dem point for skriveri og indhold.">
-  <meta name="theme-color" content="#5b5bd6">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <!-- Lets the app be added to an iPhone home screen and open like a real app -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -14,11 +15,11 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=202611140924">
+  <link rel="stylesheet" href="styles.css?v=202611140938">
 </head>
 <body>
   <header class="topbar">
@@ -54,6 +55,15 @@
 
     <!-- The book the club is rating now (or the last one finished) -->
     <section id="nowSection" class="now" hidden></section>
+
+    <!-- One-time reminder to turn notifications on -->
+    <section id="pushNudge" class="push-nudge" hidden>
+      <p><strong>Få besked, når der er en ny bog</strong>Vi giver lyd, når en bedømmelse åbner, og når den endelige score er klar.</p>
+      <div class="push-nudge-actions">
+        <button id="pushNudgeLater" class="btn small ghost" type="button">Ikke nu</button>
+        <button id="pushNudgeOn" class="btn small primary" type="button">Slå notifikationer til</button>
+      </div>
+    </section>
 
     <section id="openSection" class="open-section" hidden>
       <div class="section-head">
@@ -149,6 +159,11 @@
       <label>Dit navn
         <input id="nameInput" required maxlength="40" autocomplete="given-name">
       </label>
+      <div id="pushRow" class="push-row" hidden>
+        <div class="push-text"><strong>Notifikationer</strong><small id="pushHint"></small></div>
+        <button id="pushBtn" class="btn small" type="button">Slå til</button>
+      </div>
+      <button id="pushTestBtn" class="btn small ghost admin-tool" type="button" hidden>Send testnotifikation til mig</button>
       <button id="importOpenBtn" class="btn admin-tool" type="button" hidden>📋 Importér gamle bedømmelser</button>
       <div class="dialog-actions">
         <button id="signOutBtn" class="btn ghost danger" type="button" hidden>Log ud</button>
@@ -269,7 +284,7 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="config.js?v=202611140924"></script>
-  <script src="app.js?v=202611140924"></script>
+  <script src="config.js?v=202611140938"></script>
+  <script src="app.js?v=202611140938"></script>
 </body>
 </html>

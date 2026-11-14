@@ -203,6 +203,12 @@
         const { error } = await sb.from('profiles').upsert(row, { onConflict: 'user_id' });
         if (error) throw new Error(/profiles/.test(error.message) ? 'kør opdatering 005 i Supabase først.' : error.message);
       },
+      async savePushSubscription(sub) {
+        check(await sb.from('push_subscriptions').upsert({
+          user_id: state.user.id, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth,
+        }, { onConflict: 'endpoint' }));
+      },
+      async deletePushSubscription(endpoint) { check(await sb.from('push_subscriptions').delete().eq('endpoint', endpoint)); },
       async isAdmin(userId) {
         const { data, error } = await sb.from('club_admins').select('user_id').eq('user_id', userId);
         return !error && data.length > 0;
@@ -257,9 +263,112 @@
       }));
       render();
       if (state.openBookId && $('#bookDialog').open) renderBook();
+      openLinkedBook();
     } catch (e) {
       toast('Kunne ikke hente bøger: ' + e.message, true);
     }
+  }
+
+  // ---------- Notifications ----------
+  // iPhones only allow notifications for apps added to the home screen (iOS 16.4 and newer).
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  let swReady = null;
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+    swReady = navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).catch(() => null);
+  }
+
+  function base64UrlToBytes(b64) {
+    const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+
+  // 'unavailable' | 'needs-install' | 'unsupported' | 'denied' | 'on' | 'off'
+  async function pushStatus() {
+    if (!SHARED || !cfg.vapidPublicKey || !state.user) return 'unavailable';
+    if (isIOS && !isStandalone()) return 'needs-install';
+    if (!pushSupported() || !swReady) return 'unsupported';
+    if (Notification.permission === 'denied') return 'denied';
+    const reg = await swReady;
+    if (!reg) return 'unsupported';
+    const sub = await reg.pushManager.getSubscription();
+    return sub && Notification.permission === 'granted' ? 'on' : 'off';
+  }
+
+  async function enablePush() {
+    // Must be the first thing after the tap, or iPhone won't show the question
+    const answer = await Notification.requestPermission();
+    if (answer !== 'granted') {
+      throw new Error(answer === 'denied'
+        ? 'Notifikationer er afvist. Slå dem til under Indstillinger › Notifikationer › Holtebois.'
+        : 'Notifikationer blev ikke slået til.');
+    }
+    const reg = await swReady;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlToBytes(cfg.vapidPublicKey) });
+    await store.savePushSubscription(sub.toJSON());
+  }
+
+  async function disablePush() {
+    const reg = await swReady;
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (!sub) return;
+    try { await store.deletePushSubscription(sub.endpoint); } catch { /* it is removed on the next send anyway */ }
+    await sub.unsubscribe();
+  }
+
+  // Tell the other members' phones (runs on Supabase; never blocks the app)
+  async function notifyClub(type, bookId) {
+    if (!SHARED || !sb) return null;
+    try {
+      const { data, error } = await sb.functions.invoke('notify', { body: { type, book_id: bookId } });
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.warn('Notification not sent:', e);
+      return null;
+    }
+  }
+
+  const PUSH_TEXT = {
+    'needs-install': ['Notifikationer kræver, at appen er på din hjemmeskærm. Åbn siden i Safari, tryk Del › Føj til hjemmeskærm, og åbn appen derfra.', null],
+    unsupported: ['Din browser kan ikke vise notifikationer fra appen.', null],
+    denied: ['Notifikationer er slået fra for Holtebois. Slå dem til under Indstillinger › Notifikationer.', null],
+    off: ['Få besked, når der er en ny bog at bedømme, og når en bedømmelse lukker.', 'Slå til'],
+    on: ['Du får besked om nye bøger og lukkede bedømmelser.', 'Slå fra'],
+  };
+
+  async function renderPushRow() {
+    const status = await pushStatus();
+    $('#pushRow').hidden = status === 'unavailable';
+    if (status === 'unavailable') return;
+    const [hint, label] = PUSH_TEXT[status];
+    $('#pushHint').textContent = hint;
+    $('#pushBtn').hidden = !label;
+    $('#pushBtn').textContent = label || '';
+    $('#pushBtn').classList.toggle('primary', status === 'off');
+    $('#pushTestBtn').hidden = status !== 'on';
+  }
+
+  // A one-time nudge on the front page for members who haven't decided yet
+  async function renderPushNudge() {
+    const el = $('#pushNudge');
+    if (!el) return;
+    const status = await pushStatus();
+    el.hidden = !(status === 'off' && Notification.permission === 'default' && !readLocal('bookclub-push-nudge-dismissed', false));
+  }
+
+  // Open the book a notification pointed to (#book=<id>)
+  function openLinkedBook() {
+    const m = location.hash.match(/^#book=([\w-]+)/);
+    if (!m) return;
+    const book = state.books.find((b) => b.id === m[1]);
+    if (!book) return;
+    history.replaceState(null, '', location.pathname);
+    openBook(book.id);
   }
 
   function avatarFor(name, userId) {
@@ -982,6 +1091,7 @@
     }
     $('#importOpenBtn').hidden = !state.isAdmin || !state.member;
     renderProfilePic();
+    renderPushRow();
     $('#nameDialog').showModal();
   }
 
@@ -1218,6 +1328,7 @@
       try { await store.saveProfile({ name: state.member }); } catch { /* fine before update 005 */ }
       if (linked) toast(`Velkommen! ${plural(linked, 'tidligere bedømmelse', 'tidligere bedømmelser')} er koblet til din profil.`);
       refresh();
+      renderPushNudge();
     }
   }
 
@@ -1350,6 +1461,32 @@
       await sb.auth.signOut();
     });
 
+    // Notifications
+    const togglePush = async (btn) => {
+      btn.disabled = true;
+      try {
+        if ((await pushStatus()) === 'on') { await disablePush(); toast('Notifikationer slået fra'); }
+        else { await enablePush(); toast('Notifikationer slået til'); }
+      } catch (err) { toast(err.message, true); }
+      btn.disabled = false;
+      renderPushRow();
+      renderPushNudge();
+    };
+    $('#pushBtn').addEventListener('click', (e) => togglePush(e.currentTarget));
+    $('#pushNudgeOn').addEventListener('click', (e) => togglePush(e.currentTarget));
+    $('#pushNudgeLater').addEventListener('click', () => { writeLocal('bookclub-push-nudge-dismissed', true); renderPushNudge(); });
+    $('#pushTestBtn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const res = await notifyClub('test');
+      btn.disabled = false;
+      if (!res) toast('Testen kunne ikke sendes. Er notify-funktionen sat op i Supabase?', true);
+      else if (res.error) toast('Testen fejlede: ' + res.error, true);
+      else if (!res.sent) toast('Ingen telefoner fandt. Prøv at slå notifikationer fra og til igen.', true);
+      else toast('Testnotifikation sendt');
+    });
+    window.addEventListener('hashchange', openLinkedBook);
+
     // Profile picture
     $('#profileFile').addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -1404,6 +1541,7 @@
         if (!ok) return;
         try {
           await store.updateBook(book.id, { rating_open: open });
+          notifyClub(open ? 'book_open' : 'rating_closed', book.id);
           toast(open ? 'Bedømmelsen er åben' : 'Bedømmelsen er lukket. Den endelige score er klar!');
           await refresh();
         } catch (err) { toast('Kunne ikke ændre bedømmelsen: ' + err.message, true); }
@@ -1547,6 +1685,7 @@
         } else {
           const startNow = $('#fStartRating').checked;
           const row = await store.addBook({ ...data, added_by: state.member || null, ...(startNow ? {} : { rating_open: false }) });
+          if (startNow) notifyClub('book_open', row.id);
           toast(startNow ? 'Bogen er tilføjet. Bedømmelsen er åben!' : 'Bogen er tilføjet');
           $('#editDialog').close();
           await refresh();
@@ -1573,6 +1712,7 @@
     document.title = name;
     renderMember();
     bindEvents();
+    registerServiceWorker();
     setView(location.hash === '#stats' ? 'stats' : 'books');
 
     if (SHARED) {

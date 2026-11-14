@@ -1,2 +1,4 @@
 .DS_Store
 .claude/
+supabase/vapid-private-key.txt
+*.pem

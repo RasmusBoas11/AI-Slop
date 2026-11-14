@@ -10,4 +10,5 @@ window.BOOKCLUB_CONFIG = {
   supabaseUrl: "https://xhnoseyctmywrhwnijks.supabase.co",
   supabaseAnonKey: "sb_publishable_4HldTteuFhgPaoWCOyq2fA_gZx7vJci", // publishable key: safe to be public
   googleBooksApiKey: "AIzaSyArWpUTIvYVn42Hs-E6vK5SkaO19mnXZq8",  // locked to rasmusboas11.github.io in Google Cloud
+  vapidPublicKey: "BKKZMaja_6jnp5LSjVfTEY95DYBiNG85Lynv5tdtA4dNhmZErVmmNX_Zow_oqO7q5GYnS0T23BvsPM9xn_Xs7dg", // public half of the notification keys
 };
